@@ -61,6 +61,7 @@ public class WebSecurityConfig implements WebMvcConfigurer {
             .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS).and()
             .authorizeHttpRequests(auth -> auth
                     .antMatchers("/api/user/**", "/oauth2/**").permitAll()
+                    .antMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-resources/**", "/webjars/**", "/swagger.json").permitAll() // Ajout des endpoints Swagger
                     .anyRequest().authenticated()
             )
             .authenticationProvider(authenticationProvider())

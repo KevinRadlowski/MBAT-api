@@ -31,6 +31,9 @@ import com.mbat.mbatapi.repository.UserRepository;
 import com.mbat.mbatapi.security.jwt.JwtUtils;
 import com.mbat.mbatapi.security.services.UserDetailsImpl;
 
+/**
+ * Service de gestion des opérations liées aux utilisateurs.
+ */
 @Service
 public class UserBusiness {
 
@@ -49,7 +52,7 @@ public class UserBusiness {
     PasswordResetTokenRepository passwordResetTokenRepository;
 
     @Autowired
-    private EmailService emailService; // Service d'envoi d'email
+    private EmailService emailService;
 
     @Autowired
     private VerificationTokenRepository verificationTokenRepository;
@@ -58,18 +61,29 @@ public class UserBusiness {
     @Autowired
     JwtUtils jwtUtils;
 
+    /**
+     * Change le mot de passe de l'utilisateur.
+     *
+     * @param passwordDto  Les informations de changement de mot de passe.
+     * @param user         L'utilisateur pour lequel changer le mot de passe.
+     * @throws InvalidPasswordException Si l'ancien mot de passe est incorrect.
+     */
     public void changePassword(ChangePasswordDto passwordDto, User user) throws InvalidPasswordException {
         if (!encoder.matches(passwordDto.getOldPassword(), user.getPassword())) {
             throw new InvalidPasswordException();
         }
-        user.setPassword(passwordDto.getNewPassword());
-        hashPassword(user);
-
+        user.setPassword(encoder.encode(passwordDto.getNewPassword()));
         userRepository.save(user);
     }
 
+    /**
+     * Authentifie un utilisateur avec ses informations de connexion.
+     *
+     * @param loginRequest Les informations de connexion de l'utilisateur.
+     * @return Une réponse avec le jeton JWT et les informations de l'utilisateur.
+     */
     public ResponseEntity<?> authenticateUser(LoginRequest loginRequest) {
-        // Cherchez l'utilisateur par nom d'utilisateur
+        // Cherche l'utilisateur par nom d'utilisateur pour savoir s'il existe
         Optional<User> userOpt = userRepository.findByUsername(loginRequest.getUsername());
 
         if (userOpt.isEmpty()) {
@@ -79,7 +93,7 @@ public class UserBusiness {
 
         User user = userOpt.get();
 
-        // Vérifiez si le compte est vérifié
+        // Vérifie si le compte est vérifié
         if (!user.isVerified()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                     .body(new MessageResponse("Le compte n'est pas encore vérifié."));
@@ -103,6 +117,14 @@ public class UserBusiness {
                 roles));
     }
 
+    /**
+     * Enregistre un nouvel utilisateur.
+     *
+     * @param signUpRequest Les informations d'inscription de l'utilisateur.
+     * @return Un message indiquant le succès ou l'échec de l'inscription.
+     * @throws InvalidPasswordException Si le mot de passe est invalide.
+     * @throws InvalidEmailException    Si l'email est invalide.
+     */
     public ResponseEntity<?> registerUser(SignupRequest signUpRequest)
             throws InvalidPasswordException, InvalidEmailException {
 
@@ -115,14 +137,12 @@ public class UserBusiness {
         // Crée un nouveau compte utilisateur
         User user = new User(signUpRequest.getUsername(),
                 encoder.encode(signUpRequest.getPassword()));
-        user.setVerified(false); // Par défaut, non vérifié
+        user.setVerified(false); // Par défaut, le compte est non vérifié
 
         // Définir le rôle de l'utilisateur sur ROLE_USER par défaut
-        Set<Role> roles = new HashSet<>();
         Role userRole = roleRepository.findByName(ERole.ROLE_USER)
                 .orElseThrow(() -> new RuntimeException("Le rôle USER n'est pas défini."));
-        roles.add(userRole);
-        user.setRoles(roles);
+        user.setRoles(Collections.singleton(userRole));
 
         // Sauvegarde l'utilisateur dans la base de données
         userRepository.save(user);
@@ -140,11 +160,12 @@ public class UserBusiness {
         return ResponseEntity.ok(new MessageResponse("Utilisateur enregistré avec succès! Veuillez vérifier votre email pour activer votre compte."));
     }
 
-    private void hashPassword(User user) throws InvalidPasswordException {
-        String hashed = encoder.encode(user.getPassword());
-        user.setPassword(hashed);
-    }
-
+    /**
+     * Supprime un utilisateur par son ID.
+     *
+     * @param id L'ID de l'utilisateur à supprimer.
+     * @return Le statut de la réponse.
+     */
     public ResponseEntity<HttpStatus> deleteUser(Integer id) {
         try {
             userRepository.deleteById(id);
@@ -154,6 +175,15 @@ public class UserBusiness {
         }
     }
 
+    /**
+     * Met à jour les informations d'un utilisateur.
+     *
+     * @param id   L'ID de l'utilisateur à mettre à jour.
+     * @param user Les nouvelles informations de l'utilisateur.
+     * @return Les informations mises à jour de l'utilisateur.
+     * @throws InvalidParameterException Si les informations fournies sont invalides.
+     * @throws InvalidEmailException     Si l'email est invalide.
+     */
     public ResponseEntity<User> updateInformationUser(Integer id, User user) throws InvalidParameterException, InvalidEmailException {
         Optional<User> user_update = userRepository.findById(id);
         User __user = user_update.get();
@@ -165,22 +195,30 @@ public class UserBusiness {
         }
     }
 
-    // Ajoutez la méthode processForgotPassword ici
+    /**
+     * Gère le processus de réinitialisation du mot de passe.
+     *
+     * @param email L'email de l'utilisateur pour lequel réinitialiser le mot de passe.
+     */
     public void processForgotPassword(String email) {
-        Optional<User> userOptional = userRepository.findByUsername(email);
-        if (userOptional.isEmpty()) { // Utilisez isEmpty() pour vérifier si l'Optional est vide
-            throw new UsernameNotFoundException("Utilisateur non trouvé");
-        }
+        User user = userRepository.findByUsername(email)
+                .orElseThrow(() -> new UsernameNotFoundException("Utilisateur non trouvé"));
 
-        User user = userOptional.get(); // Extraire l'utilisateur de l'Optional
         String token = UUID.randomUUID().toString();
         PasswordResetToken resetToken = new PasswordResetToken(token, user);
         passwordResetTokenRepository.save(resetToken);
 
-        String resetLink = "http://192.168.56.101:4200/reset-password?token=" + token; // Votre URL Angular
+        String resetLink = "http://192.168.56.101:4200/reset-password?token=" + token;
         emailService.sendResetPasswordEmail(user.getUsername(), resetLink);
     }
-    // Ajoutez la méthode updatePassword ici
+
+    /**
+     * Met à jour le mot de passe d'un utilisateur.
+     *
+     * @param token       Le jeton de réinitialisation de mot de passe.
+     * @param newPassword Le nouveau mot de passe.
+     * @throws InvalidPasswordException Si le mot de passe est invalide.
+     */
     public void updatePassword(String token, String newPassword) throws InvalidPasswordException {
         PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(token);
         if (resetToken == null || resetToken.isExpired()) {
@@ -188,9 +226,6 @@ public class UserBusiness {
         }
 
         User user = resetToken.getUser();
-        if (user == null) {
-            throw new IllegalArgumentException("Utilisateur non trouvé pour ce jeton");
-        }
 
         // Validez le nouveau mot de passe s'il y a des règles spécifiques (par exemple, longueur, caractères spéciaux, etc.)
         if (newPassword == null || newPassword.isEmpty()) {

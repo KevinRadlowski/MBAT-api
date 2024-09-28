@@ -7,9 +7,18 @@ import io.swagger.v3.oas.models.info.License;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * Configuration de la documentation OpenAPI (Swagger) pour l'API.
+ * Cette classe définit les informations de base affichées dans l'interface Swagger.
+ */
 @Configuration
 public class OpenApiConfig {
 
+    /**
+     * Crée et configure l'objet OpenAPI avec des informations générales sur l'API.
+     *
+     * @return Un objet OpenAPI configuré avec les informations sur l'API.
+     */
     @Bean
     public OpenAPI customOpenAPI() {
         return new OpenAPI()
