@@ -19,7 +19,12 @@ public class UserDetailsServiceImpl implements UserDetailsService {
   @Transactional
   public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
     User user = userRepository.findByUsername(username)
-        .orElseThrow(() -> new UsernameNotFoundException("User Not Found with username: " + username));
+            .orElseThrow(() -> new UsernameNotFoundException("Utilisateur non trouvé avec l'email : " + username));
+
+    // Vérifiez si l'utilisateur est vérifié
+    if (!user.isVerified()) {
+      throw new UsernameNotFoundException("Le compte n'est pas encore vérifié.");
+    }
 
     return UserDetailsImpl.build(user);
   }

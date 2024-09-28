@@ -43,6 +43,9 @@ public class User {
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String password;
 
+    private boolean isVerified = false;
+
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"), inverseJoinColumns = @JoinColumn(name = "role_id"))
     private Set<Role> roles = new HashSet<>();
@@ -83,6 +86,16 @@ public class User {
         }
     }
 
+
+    public boolean isVerified() {
+        return isVerified;
+    }
+
+    public void setVerified(boolean verified) {
+        isVerified = verified;
+    }
+
+
     public String getPassword() {
         return password;
     }
@@ -101,7 +114,7 @@ public class User {
     public Set<Role> getRoles() {
         return roles;
       }
-    
+
       public void setRoles(Set<Role> roles) {
         this.roles = roles;
       }
