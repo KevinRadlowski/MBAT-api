@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import com.mbat.mbatapi.auth.ChangePasswordDto;
-import com.mbat.mbatapi.business.UserBusiness;
+import com.mbat.mbatapi.service.UserService;
 import com.mbat.mbatapi.entity.User;
 import com.mbat.mbatapi.exception.InvalidEmailException;
 import com.mbat.mbatapi.exception.InvalidPasswordException;
@@ -42,7 +42,7 @@ import java.util.UUID;
  class UserController {
 
     @Autowired
-    private UserBusiness business;
+    private UserService userService;
 
     @Autowired
     private UserRepository userRepository;
@@ -68,7 +68,7 @@ import java.util.UUID;
     })
     @PostMapping("/signin")
     public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) throws UserExistException {
-        return business.authenticateUser(loginRequest);
+        return userService.authenticateUser(loginRequest);
     }
 
     /**
@@ -87,7 +87,7 @@ import java.util.UUID;
     @PostMapping("/signup")
     public ResponseEntity<?> registerUser(@Valid @RequestBody SignupRequest signUpRequest)
             throws InvalidPasswordException, InvalidEmailException {
-        return business.registerUser(signUpRequest);
+        return userService.registerUser(signUpRequest);
     }
 
     /**
@@ -105,7 +105,7 @@ import java.util.UUID;
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void changePassword(@RequestBody ChangePasswordDto body, @AuthenticationPrincipal User user) {
         try {
-            business.changePassword(body, user);
+            userService.changePassword(body, user);
         } catch (InvalidPasswordException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "L'ancien mot de passe ne correspond pas");
         }
@@ -129,7 +129,7 @@ import java.util.UUID;
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public ResponseEntity<User> updateInformationUser(@PathVariable("id") Integer id, @RequestBody User user)
             throws InvalidEmailException {
-        return business.updateInformationUser(id, user);
+        return userService.updateInformationUser(id, user);
     }
 
     /**
@@ -145,7 +145,7 @@ import java.util.UUID;
     })
     @DeleteMapping("/{id}")
     public ResponseEntity<HttpStatus> deleteUser(@PathVariable("id") Integer id) {
-        return business.deleteUser(id);
+        return userService.deleteUser(id);
     }
 
 
@@ -167,7 +167,7 @@ import java.util.UUID;
             if (email == null || email.isEmpty()) {
                 throw new IllegalArgumentException("Email is required");
             }
-            business.processForgotPassword(email);
+            userService.processForgotPassword(email);
             Map<String, String> response = new HashMap<>();
             response.put("message", "Lien de réinitialisation envoyé avec succès");
             return ResponseEntity.ok(response);
@@ -194,7 +194,7 @@ import java.util.UUID;
         try {
             String token = requestBody.get("token");
             String newPassword = requestBody.get("newPassword");
-            business.updatePassword(token, newPassword);
+            userService.updatePassword(token, newPassword);
 
             Map<String, String> response = new HashMap<>();
             response.put("message", "Mot de passe mis à jour avec succès");
@@ -255,22 +255,22 @@ import java.util.UUID;
     }
 
     /**
-     * Réenvoie un e-mail de vérification à l'utilisateur.
+     * Réenvoie un e-mail de déverrouillage à l'utilisateur si le compte est verrouillé.
      *
      * @param requestBody Contient l'e-mail de l'utilisateur.
      * @return Un message de succès ou une erreur en cas d'échec.
      */
-    @Operation(summary = "Renvoyer l'e-mail de vérification", description = "Réenvoie un e-mail de vérification à l'utilisateur si le compte n'est pas encore vérifié.")
+    @Operation(summary = "Renvoyer l'e-mail de déverrouillage", description = "Réenvoie un e-mail de déverrouillage à l'utilisateur si le compte est verrouillé.")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "E-mail de vérification envoyé avec succès."),
-            @ApiResponse(responseCode = "400", description = "Erreur lors de l'envoi de l'e-mail de vérification.")
+            @ApiResponse(responseCode = "200", description = "E-mail de déverrouillage envoyé avec succès."),
+            @ApiResponse(responseCode = "400", description = "Erreur lors de l'envoi de l'e-mail de déverrouillage.")
     })
-    @PostMapping("/resend-verification-email")
-    public ResponseEntity<String> resendVerificationEmail(@RequestBody Map<String, String> requestBody) {
+    @PostMapping("/resend-unlock-email")
+    public ResponseEntity<String> resendUnlockEmail(@RequestBody Map<String, String> requestBody) {
         try {
             String email = requestBody.get("email");
             if (email == null || email.isEmpty()) {
-                throw new IllegalArgumentException("Email is required");
+                throw new IllegalArgumentException("L'e-mail est requis");
             }
 
             Optional<User> userOptional = userRepository.findByUsername(email);
@@ -279,23 +279,26 @@ import java.util.UUID;
             }
 
             User user = userOptional.get();
-            if (user.isVerified()) {
-                return ResponseEntity.badRequest().body("Ce compte est déjà vérifié.");
+
+            // Vérifie si le compte est verrouillé
+            if (!user.isAccountLocked()) {
+                return ResponseEntity.badRequest().body("Le compte n'est pas verrouillé.");
             }
 
-            // Créer un nouveau jeton de vérification
-            String token = UUID.randomUUID().toString();
-            VerificationToken verificationToken = new VerificationToken(token, user);
-            verificationTokenRepository.save(verificationToken);
+            // Créer un nouveau jeton de déverrouillage
+            String unlockToken = UUID.randomUUID().toString();
+            user.setUnlockToken(unlockToken);
+            userRepository.save(user);
 
-            // Envoyer un nouvel e-mail de vérification
-            String verificationLink = "http://localhost:4200/verify-email?token=" + token;
-            emailService.sendVerificationEmail(user.getUsername(), verificationLink);
+            // Envoyer un nouvel e-mail de déverrouillage avec le lien vers le frontend Angular
+            String unlockLink = "http://192.168.56.101:4200/unlock-account?token=" + unlockToken;  // Remplace cette URL par celle de ton frontend
+            emailService.sendUnlockEmail(user.getUsername(), unlockLink);
 
-            return ResponseEntity.ok("Un nouvel e-mail de vérification a été envoyé à votre adresse.");
+            return ResponseEntity.ok("Un nouvel e-mail de déverrouillage a été envoyé à votre adresse.");
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Erreur lors de l'envoi de l'e-mail de vérification : " + e.getMessage());
+            return ResponseEntity.badRequest().body("Erreur lors de l'envoi de l'e-mail de déverrouillage : " + e.getMessage());
         }
     }
+
 
 }

@@ -1,6 +1,8 @@
 package com.mbat.mbatapi.security.services;
 
+import com.mbat.mbatapi.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.LockedException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -9,6 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.mbat.mbatapi.entity.User;
 import com.mbat.mbatapi.repository.UserRepository;
+
+import java.util.Date;
 
 /**
  * Implémentation du service de détails utilisateur pour la gestion de l'authentification.
@@ -30,16 +34,18 @@ public class UserDetailsServiceImpl implements UserDetailsService {
   @Override
   @Transactional
   public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
-    // Recherche de l'utilisateur par nom d'utilisateur
     User user = userRepository.findByUsername(username)
-            .orElseThrow(() -> new UsernameNotFoundException("Utilisateur non trouvé avec l'email : " + username));
+            .orElseThrow(() -> new UsernameNotFoundException("Utilisateur non trouvé : " + username));
 
-    // Vérifie si l'utilisateur est vérifié
+    if (user.isAccountLocked()) {
+      long lockTimeRemaining = (user.getLockTime().getTime() + UserService.LOCK_TIME_DURATION - System.currentTimeMillis()) / 1000;
+      throw new LockedException("Le compte est verrouillé. Temps restant avant déblocage : " + lockTimeRemaining + " secondes.");
+    }
+
     if (!user.isVerified()) {
       throw new UsernameNotFoundException("Le compte n'est pas encore vérifié.");
     }
 
     return UserDetailsImpl.build(user);
   }
-
 }

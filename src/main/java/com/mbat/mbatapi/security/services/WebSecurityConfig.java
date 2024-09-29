@@ -5,6 +5,7 @@ import com.mbat.mbatapi.security.jwt.AuthTokenFilter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -20,6 +21,7 @@ import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
+@EnableAsync
 @EnableGlobalMethodSecurity(
         prePostEnabled = true)
 public class WebSecurityConfig implements WebMvcConfigurer {
@@ -60,10 +62,12 @@ public class WebSecurityConfig implements WebMvcConfigurer {
             .exceptionHandling().authenticationEntryPoint(unauthorizedHandler).and()
             .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS).and()
             .authorizeHttpRequests(auth -> auth
-                    .antMatchers("/api/user/**", "/oauth2/**").permitAll()
+                    .antMatchers("/api/user/**", "/oauth2/**", "/api/unlock/**").permitAll()
                     .antMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-resources/**", "/webjars/**", "/swagger.json").permitAll() // Ajout des endpoints Swagger
                     .anyRequest().authenticated()
             )
+            .exceptionHandling()
+            .authenticationEntryPoint(unauthorizedHandler).and()
             .authenticationProvider(authenticationProvider())
             .addFilterBefore(authenticationJwtTokenFilter(), UsernamePasswordAuthenticationFilter.class);
 

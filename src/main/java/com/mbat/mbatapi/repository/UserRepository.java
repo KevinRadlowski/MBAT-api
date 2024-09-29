@@ -10,6 +10,7 @@ import com.mbat.mbatapi.entity.User;
 @Repository
 public interface UserRepository extends JpaRepository<User, Integer> {
     Optional<User> findByUsername(String username);
+    Optional<User> findByUnlockToken(String unlockToken);
 
     Boolean existsByUsername(String username);
 

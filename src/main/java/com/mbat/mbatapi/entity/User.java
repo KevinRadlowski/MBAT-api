@@ -1,6 +1,7 @@
 package com.mbat.mbatapi.entity;
 
 import java.security.InvalidParameterException;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -49,6 +50,12 @@ public class User {
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"), inverseJoinColumns = @JoinColumn(name = "role_id"))
     private Set<Role> roles = new HashSet<>();
+
+    private int failedAttempts;
+    private boolean accountLocked;
+    private Date lockTime;
+    private String unlockToken;
+
 
     public User(String username, String password)
             throws InvalidEmailException, InvalidPasswordException {
@@ -100,15 +107,8 @@ public class User {
         return password;
     }
 
-    public void setPassword(String password) throws InvalidPasswordException {
-        // if
-        // (password.matches("^(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#&()\\[\\]{}:;',?/*~$^+=<>]).{8,20}$"))
-        // {
-        // System.out.println("Le mot de passe est valide !");
+    public void setPassword(String password) {
         this.password = password;
-        // } else {
-        // throw new InvalidPasswordException();
-        // }
     }
 
     public Set<Role> getRoles() {
@@ -118,4 +118,36 @@ public class User {
       public void setRoles(Set<Role> roles) {
         this.roles = roles;
       }
+
+    public int getFailedAttempts() {
+        return failedAttempts;
+    }
+
+    public void setFailedAttempts(int failedAttempts) {
+        this.failedAttempts = failedAttempts;
+    }
+
+    public boolean isAccountLocked() {
+        return accountLocked;
+    }
+
+    public void setAccountLocked(boolean accountLocked) {
+        this.accountLocked = accountLocked;
+    }
+
+    public Date getLockTime() {
+        return lockTime;
+    }
+
+    public void setLockTime(Date lockTime) {
+        this.lockTime = lockTime;
+    }
+
+    public String getUnlockToken() {
+        return unlockToken;
+    }
+
+    public void setUnlockToken(String unlockToken) {
+        this.unlockToken = unlockToken;
+    }
 }

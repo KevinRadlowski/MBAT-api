@@ -1,17 +1,26 @@
-package com.mbat.mbatapi.business;
+package com.mbat.mbatapi.service;
 
-import java.security.InvalidParameterException;
-import java.util.*;
-import java.util.stream.Collectors;
-
+import com.mbat.mbatapi.auth.ChangePasswordDto;
 import com.mbat.mbatapi.entity.*;
+import com.mbat.mbatapi.exception.InvalidEmailException;
+import com.mbat.mbatapi.exception.InvalidPasswordException;
+import com.mbat.mbatapi.payload.request.LoginRequest;
+import com.mbat.mbatapi.payload.request.SignupRequest;
+import com.mbat.mbatapi.payload.response.JwtResponse;
+import com.mbat.mbatapi.payload.response.MessageResponse;
 import com.mbat.mbatapi.repository.PasswordResetTokenRepository;
+import com.mbat.mbatapi.repository.RoleRepository;
+import com.mbat.mbatapi.repository.UserRepository;
 import com.mbat.mbatapi.repository.VerificationTokenRepository;
-import com.mbat.mbatapi.service.EmailService;
+import com.mbat.mbatapi.security.jwt.JwtUtils;
+import com.mbat.mbatapi.security.services.UserDetailsImpl;
+import com.mbat.mbatapi.security.services.UserDetailsServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -19,23 +28,17 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import com.mbat.mbatapi.auth.ChangePasswordDto;
-import com.mbat.mbatapi.exception.InvalidEmailException;
-import com.mbat.mbatapi.exception.InvalidPasswordException;
-import com.mbat.mbatapi.payload.request.LoginRequest;
-import com.mbat.mbatapi.payload.request.SignupRequest;
-import com.mbat.mbatapi.payload.response.JwtResponse;
-import com.mbat.mbatapi.payload.response.MessageResponse;
-import com.mbat.mbatapi.repository.RoleRepository;
-import com.mbat.mbatapi.repository.UserRepository;
-import com.mbat.mbatapi.security.jwt.JwtUtils;
-import com.mbat.mbatapi.security.services.UserDetailsImpl;
+import java.security.InvalidParameterException;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Service de gestion des opérations liées aux utilisateurs.
  */
 @Service
-public class UserBusiness {
+public class UserService {
+    private static final int MAX_FAILED_ATTEMPTS = 5; // Verrouille le compte après 5 tentatives
+    public static final long LOCK_TIME_DURATION = 15 * 60 * 1000; // Durée du verrouillage (15 minutes)
 
     @Autowired
     private UserRepository userRepository;
@@ -57,6 +60,8 @@ public class UserBusiness {
     @Autowired
     private VerificationTokenRepository verificationTokenRepository;
 
+    @Autowired
+    private UserDetailsServiceImpl userDetailsService;
 
     @Autowired
     JwtUtils jwtUtils;
@@ -64,8 +69,8 @@ public class UserBusiness {
     /**
      * Change le mot de passe de l'utilisateur.
      *
-     * @param passwordDto  Les informations de changement de mot de passe.
-     * @param user         L'utilisateur pour lequel changer le mot de passe.
+     * @param passwordDto Les informations de changement de mot de passe.
+     * @param user        L'utilisateur pour lequel changer le mot de passe.
      * @throws InvalidPasswordException Si l'ancien mot de passe est incorrect.
      */
     public void changePassword(ChangePasswordDto passwordDto, User user) throws InvalidPasswordException {
@@ -83,38 +88,121 @@ public class UserBusiness {
      * @return Une réponse avec le jeton JWT et les informations de l'utilisateur.
      */
     public ResponseEntity<?> authenticateUser(LoginRequest loginRequest) {
-        // Cherche l'utilisateur par nom d'utilisateur pour savoir s'il existe
         Optional<User> userOpt = userRepository.findByUsername(loginRequest.getUsername());
 
         if (userOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(new MessageResponse("Utilisateur non trouvé."));
+                    .body(new MessageResponse("Identifiant ou mot de passe incorrect."));
         }
 
         User user = userOpt.get();
 
-        // Vérifie si le compte est vérifié
-        if (!user.isVerified()) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(new MessageResponse("Le compte n'est pas encore vérifié."));
+        if (user.isAccountLocked()) {
+            if (isLockTimeExpired(user)) {
+                unlockAccount(user);
+            } else {
+                long lockTimeRemainingInSeconds = (user.getLockTime().getTime() + LOCK_TIME_DURATION - System.currentTimeMillis()) / 1000;
+
+                long minutes = lockTimeRemainingInSeconds / 60;
+                long seconds = lockTimeRemainingInSeconds % 60;
+
+                String responseMessage = String.format(
+                        "⚠️ Votre compte est actuellement verrouillé pour des raisons de sécurité. Il sera déverrouillé dans %d minutes et %d secondes.<br>" +
+                                "<br>🔑 Si vous ne voulez pas attendre, cliquez sur le bouton ci-dessous pour demander un nouveau mail de déverrouillage.<br>",
+                        minutes, seconds
+                );
+
+                // Utiliser le constructeur avec l'email
+                MessageResponse messageResponse = new MessageResponse(responseMessage, user.getUsername());
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(messageResponse);
+            }
         }
 
-        // Authentification
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
+        try {
+            Authentication authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
 
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-        String jwt = jwtUtils.generateJwtToken(authentication);
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+            String jwt = jwtUtils.generateJwtToken(authentication);
 
-        UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
-        List<String> roles = userDetails.getAuthorities().stream()
-                .map(item -> item.getAuthority())
-                .collect(Collectors.toList());
+            UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
+            List<String> roles = userDetails.getAuthorities().stream()
+                    .map(item -> item.getAuthority())
+                    .collect(Collectors.toList());
 
-        return ResponseEntity.ok(new JwtResponse(jwt,
-                userDetails.getId(),
-                userDetails.getUsername(),
-                roles));
+            resetFailedAttempts(user);
+            return ResponseEntity.ok(new JwtResponse(jwt, userDetails.getId(), userDetails.getUsername(), roles));
+
+        } catch (BadCredentialsException e) {
+            increaseFailedAttempts(user);
+            int attemptsRemaining = MAX_FAILED_ATTEMPTS - user.getFailedAttempts();
+            if (attemptsRemaining > 0) {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(new MessageResponse("Identifiant ou mot de passe incorrect. Tentatives restantes : " + attemptsRemaining));
+            } else {
+                String resendUnlockLink = "http://localhost:4200/unlock-account?token=" + user.getUnlockToken();
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(new MessageResponse("Votre compte est bloqué pour " + (LOCK_TIME_DURATION / 1000 / 60) + " minutes."));
+            }
+        }
+    }
+
+    /**
+     * Incrémente les tentatives échouées et verrouille le compte si le maximum est atteint.
+     */
+    @Async
+    private void increaseFailedAttempts(User user) {
+        int newFailedAttempts = user.getFailedAttempts() + 1;
+        user.setFailedAttempts(newFailedAttempts);
+
+        if (newFailedAttempts >= MAX_FAILED_ATTEMPTS) {
+            lockAccount(user);
+        }
+
+        userRepository.save(user);
+    }
+
+    /**
+     * Réinitialise les tentatives échouées après une connexion réussie.
+     */
+    private void resetFailedAttempts(User user) {
+        user.setFailedAttempts(0);
+        userRepository.save(user);
+    }
+
+    /**
+     * Verrouille le compte de l'utilisateur.
+     */
+    private void lockAccount(User user) {
+        user.setAccountLocked(true);
+        user.setLockTime(new Date());
+        String unlockToken = UUID.randomUUID().toString();
+        user.setUnlockToken(unlockToken);
+        userRepository.save(user);
+
+        // Envoi d'email pour déverrouillage
+        String unlockUrl = "http://192.168.56.101:4200/unlock-account?token=" + unlockToken;
+        emailService.sendUnlockEmail(user.getUsername(), unlockUrl);
+    }
+
+    /**
+     * Vérifie si le temps de verrouillage est expiré.
+     */
+    private boolean isLockTimeExpired(User user) {
+        long lockTimeInMillis = user.getLockTime().getTime();
+        long currentTimeInMillis = System.currentTimeMillis();
+        return currentTimeInMillis - lockTimeInMillis > LOCK_TIME_DURATION;
+    }
+
+    /**
+     * Déverrouille le compte et réinitialise les tentatives échouées.
+     */
+    private void unlockAccount(User user) {
+        user.setAccountLocked(false);
+        user.setFailedAttempts(0);
+        user.setLockTime(null);
+        user.setUnlockToken(null);
+        userRepository.save(user);
     }
 
     /**
