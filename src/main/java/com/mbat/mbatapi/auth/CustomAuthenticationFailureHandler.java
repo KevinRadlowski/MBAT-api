@@ -1,9 +1,7 @@
 package com.mbat.mbatapi.auth;
 
-import com.mbat.mbatapi.entity.User;
-import com.mbat.mbatapi.repository.UserRepository;
-import com.mbat.mbatapi.security.services.UserDetailsServiceImpl;
-import com.mbat.mbatapi.service.EmailService;
+import com.mbat.mbatapi.auth.repository.UserRepository;
+import com.mbat.mbatapi.auth.security.services.UserDetailsServiceImpl;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
@@ -13,8 +11,6 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.util.Optional;
-import java.util.UUID;
 
 @Component
 public class CustomAuthenticationFailureHandler implements AuthenticationFailureHandler {
