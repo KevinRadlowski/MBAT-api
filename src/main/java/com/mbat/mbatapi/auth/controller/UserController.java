@@ -72,6 +72,21 @@ import java.util.UUID;
         return userService.authenticateUser(loginRequest);
     }
 
+    @GetMapping("/get-one/{username}")
+    public ResponseEntity<?> getUserInfo(@PathVariable String username) {
+        Optional<User> userOpt = userRepository.findByUsername(username);
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            Map<String, Object> userData = new HashMap<>();
+            userData.put("username", user.getUsername());
+            userData.put("verified", user.isVerified());  // Ajouter l'état de vérification
+            return ResponseEntity.ok(userData);
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Utilisateur non trouvé"));
+        }
+    }
+
+
     /**
      * Inscrit un nouvel utilisateur.
      *
@@ -154,7 +169,7 @@ import java.util.UUID;
             @ApiResponse(responseCode = "204", description = "Utilisateur supprimé avec succès."),
             @ApiResponse(responseCode = "500", description = "Erreur interne du serveur.")
     })
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/delete-user/{id}")
     public ResponseEntity<?> deleteUser(@PathVariable("id") Integer id) {
         ResponseEntity<HttpStatus> response = userService.deleteUser(id);
         if (response.getStatusCode() == HttpStatus.NO_CONTENT) {
@@ -220,6 +235,42 @@ import java.util.UUID;
 
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(new MessageResponse("Erreur lors de la réinitialisation du mot de passe : " + e.getMessage()));
+        }
+    }
+
+    @Operation(summary = "Met à jour le mot de passe d'un utilisateur", description = "Permet de mettre à jour le mot de passe d'un utilisateur en fonction de son identifiant.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "204", description = "Mot de passe mis à jour avec succès."),
+            @ApiResponse(responseCode = "400", description = "Erreur lors de la mise à jour du mot de passe.")
+    })
+    @PutMapping("/update-password/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public ResponseEntity<?> updateUserPassword(@PathVariable("id") Integer id, @RequestBody ChangePasswordDto passwordDto) {
+        try {
+            // Appel au service pour mettre à jour le mot de passe
+            userService.updateUserPassword(id, passwordDto.getNewPassword());
+            return ResponseEntity.noContent().build(); // Statut 204 : succès sans contenu
+        } catch (InvalidPasswordException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Erreur : " + e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new MessageResponse("Erreur lors de la mise à jour du mot de passe."));
+        }
+    }
+
+    @GetMapping("/check-old-password")
+    public ResponseEntity<?> checkOldPassword(@RequestParam("userId") Integer userId, @RequestParam("oldPassword") String oldPassword) {
+        Optional<User> userOpt = userRepository.findById(userId);
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            boolean isValid = userService.checkOldPassword(user, oldPassword);
+            if (isValid) {
+                return ResponseEntity.ok(new MessageResponse("Mot de passe valide."));
+            } else {
+                return ResponseEntity.badRequest().body(new MessageResponse("L'ancien mot de passe est incorrect."));
+            }
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Utilisateur non trouvé."));
         }
     }
 

@@ -263,9 +263,12 @@ public class UserService {
      */
     public ResponseEntity<HttpStatus> deleteUser(Integer id) {
         try {
+
+// Supprimer les jetons de réinitialisation de mot de passe associés
             userRepository.deleteById(id);
             return new ResponseEntity<>(HttpStatus.NO_CONTENT);
         } catch (Exception e) {
+            e.printStackTrace(); // Affiche les détails complets de l'erreur dans les logs
             return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
@@ -274,17 +277,41 @@ public class UserService {
      * Met à jour les informations d'un utilisateur.
      *
      * @param id   L'ID de l'utilisateur à mettre à jour.
-     * @param user Les nouvelles informations de l'utilisateur.
+     * @param updatedUser Les nouvelles informations de l'utilisateur.
      * @return Les informations mises à jour de l'utilisateur.
      * @throws InvalidParameterException Si les informations fournies sont invalides.
      * @throws InvalidEmailException     Si l'email est invalide.
      */
-    public ResponseEntity<User> updateInformationUser(Integer id, User user) throws InvalidParameterException, InvalidEmailException {
-        Optional<User> user_update = userRepository.findById(id);
-        User __user = user_update.get();
-        if (user_update.isPresent()) {
-            __user.setUsername(user.getUsername());
-            return new ResponseEntity<>(userRepository.save(__user), HttpStatus.OK);
+    public ResponseEntity<User> updateInformationUser(Integer id, User updatedUser) throws InvalidParameterException, InvalidEmailException {
+        Optional<User> userOpt = userRepository.findById(id);
+
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+
+            if (!user.getUsername().equals(updatedUser.getUsername())) {
+
+                // Met à jour l'adresse email
+                user.setUsername(updatedUser.getUsername());
+
+                // Réinitialise le statut de vérification
+                user.setVerified(false);
+
+                // Crée un nouveau jeton de vérification pour l'utilisateur
+                String token = UUID.randomUUID().toString();
+                VerificationToken verificationToken = new VerificationToken(token, user);
+                verificationTokenRepository.save(verificationToken);
+
+                // Envoie l'e-mail de confirmation avec le nouveau lien de vérification
+                String verificationLink = "http://192.168.56.101:4200/verify-email?token=" + token;
+                emailService.sendVerificationEmailChanged(user.getUsername(), verificationLink);
+            }
+
+            // Sauvegarde les modifications
+            userRepository.save(user);
+
+
+
+            return new ResponseEntity<>(user, HttpStatus.OK);
         } else {
             return new ResponseEntity<>(HttpStatus.NOT_FOUND);
         }
@@ -332,6 +359,30 @@ public class UserService {
         passwordResetTokenRepository.delete(resetToken); // Supprimez le jeton après utilisation
     }
 
+    public void updateUserPassword(Integer id, String newPassword) throws InvalidPasswordException {
+        Optional<User> userOpt = userRepository.findById(id);
+
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+
+            // Validez le nouveau mot de passe ici (par exemple, vérifiez sa complexité)
+            if (newPassword == null || newPassword.isEmpty()) {
+                throw new InvalidPasswordException("Le mot de passe ne peut pas être vide.");
+            }
+
+            // Encodage et mise à jour du mot de passe
+            user.setPassword(encoder.encode(newPassword));
+            userRepository.save(user);
+        } else {
+            throw new InvalidPasswordException("Utilisateur non trouvé.");
+        }
+    }
+
+    public boolean checkOldPassword(User user, String oldPassword) {
+        // Utilise le PasswordEncoder pour comparer le mot de passe fourni et celui dans la base de données
+        return encoder.matches(oldPassword, user.getPassword());
+    }
+
     public ResponseEntity<?> resendVerificationEmail(String email) {
         // Rechercher l'utilisateur par son email
         Optional<User> userOpt = userRepository.findByUsername(email);
@@ -346,11 +397,17 @@ public class UserService {
             return ResponseEntity.badRequest().body(new MessageResponse("Cet utilisateur a déjà vérifié son compte."));
         }
 
+        // Supprimer tous les anciens tokens de vérification pour cet utilisateur
+        List<VerificationToken> tokens = verificationTokenRepository.findAllByUser(user);
+        if (!tokens.isEmpty()) {
+            verificationTokenRepository.deleteAll(tokens);
+        }
+
         // Créer un nouveau jeton de vérification
         String token = UUID.randomUUID().toString();
         VerificationToken verificationToken = new VerificationToken(token, user);
 
-        // Supprimer l'ancien token s'il existe et sauvegarder le nouveau
+        // Sauvegarder le nouveau token
         verificationTokenRepository.save(verificationToken);
 
         // Générer un lien de vérification
