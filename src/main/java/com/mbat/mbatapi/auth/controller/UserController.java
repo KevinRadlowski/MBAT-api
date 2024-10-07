@@ -2,11 +2,16 @@ package com.mbat.mbatapi.auth.controller;
 
 import javax.validation.Valid;
 
+import com.mbat.mbatapi.auth.entity.RefreshToken;
 import com.mbat.mbatapi.auth.entity.VerificationToken;
+import com.mbat.mbatapi.auth.payload.response.JwtResponse;
 import com.mbat.mbatapi.auth.payload.response.MessageResponse;
 import com.mbat.mbatapi.auth.repository.UserRepository;
 import com.mbat.mbatapi.auth.repository.VerificationTokenRepository;
+import com.mbat.mbatapi.auth.security.jwt.JwtUtils;
+import com.mbat.mbatapi.auth.security.services.UserDetailsImpl;
 import com.mbat.mbatapi.auth.service.EmailService;
+import com.mbat.mbatapi.auth.service.RefreshTokenService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -14,6 +19,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -27,10 +34,8 @@ import com.mbat.mbatapi.auth.exception.UserExistException;
 import com.mbat.mbatapi.auth.payload.request.LoginRequest;
 import com.mbat.mbatapi.auth.payload.request.SignupRequest;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Contrôleur pour gérer les opérations utilisateur telles que l'inscription, la connexion,
@@ -54,6 +59,13 @@ import java.util.UUID;
     @Autowired
     private EmailService emailService; // Service d'envoi d'email
 
+    @Autowired
+    private RefreshTokenService refreshTokenService;
+
+    @Autowired
+    private JwtUtils jwtUtils;
+
+
     /**
      * Authentifie un utilisateur avec son nom d'utilisateur et son mot de passe.
      *
@@ -70,6 +82,50 @@ import java.util.UUID;
     @PostMapping("/signin")
     public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) throws UserExistException {
         return userService.authenticateUser(loginRequest);
+    }
+
+    @PostMapping("/refresh-token")
+    public ResponseEntity<?> refreshToken(@RequestBody Map<String, String> requestBody) {
+        String refreshToken = requestBody.get("refreshToken");
+        Optional<RefreshToken> refreshTokenOptional = refreshTokenService.findByToken(refreshToken);
+
+        if (refreshTokenOptional.isPresent()) {
+            RefreshToken token = refreshTokenOptional.get();
+            refreshTokenService.verifyExpiration(token);
+
+            // Génération d'un nouveau token d'accès
+            String newAccessToken = jwtUtils.generateJwtToken(
+                    new UsernamePasswordAuthenticationToken(token.getUser().getUsername(), null)
+            );
+
+            // Conversion des rôles de Set<Role> à List<String>
+            List<String> roles = token.getUser().getRoles().stream()
+                    .map(role -> role.getName().name()) // Si la classe Role a un champ "name" qui renvoie le nom du rôle.
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(new JwtResponse(newAccessToken, token.getUser().getId(), token.getUser().getUsername(), roles));
+        } else {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Refresh token invalide ou expiré.");
+        }
+    }
+
+
+
+    @PostMapping("/logout-all-devices")
+    public ResponseEntity<?> logoutFromAllDevices(@AuthenticationPrincipal UserDetailsImpl userDetails) throws InvalidEmailException {
+        // Révoquer tous les tokens liés à cet utilisateur
+        refreshTokenService.deleteByUser(userDetails.getUser());
+        return ResponseEntity.ok("Déconnexion de tous les appareils réussie.");
+    }
+
+    @PostMapping("/logout-all")
+    public ResponseEntity<?> logoutAllDevices(@AuthenticationPrincipal UserDetailsImpl userDetails) {
+        try {
+            refreshTokenService.revokeAllTokens(userDetails.getUsername());  // Révoquer tous les tokens de l'utilisateur
+            return ResponseEntity.ok(new MessageResponse("Déconnexion réussie sur tous les appareils."));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Erreur lors de la déconnexion de tous les appareils : " + e.getMessage()));
+        }
     }
 
     @GetMapping("/get-one/{username}")

@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import com.mbat.mbatapi.auth.exception.InvalidEmailException;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -16,14 +17,10 @@ public class UserDetailsImpl implements UserDetails {
     private static final long serialVersionUID = 1L;
 
     private Integer id;
-
     private String username;
-
     @JsonIgnore
     private String password;
-
     private boolean isVerified;
-
     private Collection<? extends GrantedAuthority> authorities;
 
     public UserDetailsImpl(Integer id, String username, String password,boolean isVerified,
@@ -102,5 +99,13 @@ public class UserDetailsImpl implements UserDetails {
             return false;
         UserDetailsImpl user = (UserDetailsImpl) o;
         return Objects.equals(id, user.id);
+    }
+
+    public User getUser() throws InvalidEmailException {
+        User user = new User();
+        user.setId(this.id);
+        user.setUsername(this.username);
+        user.setPassword(this.password);
+        return user;
     }
 }

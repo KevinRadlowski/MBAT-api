@@ -8,10 +8,7 @@ import com.mbat.mbatapi.auth.payload.request.LoginRequest;
 import com.mbat.mbatapi.auth.payload.request.SignupRequest;
 import com.mbat.mbatapi.auth.payload.response.JwtResponse;
 import com.mbat.mbatapi.auth.payload.response.MessageResponse;
-import com.mbat.mbatapi.auth.repository.PasswordResetTokenRepository;
-import com.mbat.mbatapi.auth.repository.RoleRepository;
-import com.mbat.mbatapi.auth.repository.UserRepository;
-import com.mbat.mbatapi.auth.repository.VerificationTokenRepository;
+import com.mbat.mbatapi.auth.repository.*;
 import com.mbat.mbatapi.auth.security.jwt.JwtUtils;
 import com.mbat.mbatapi.auth.security.services.UserDetailsImpl;
 import com.mbat.mbatapi.auth.security.services.UserDetailsServiceImpl;
@@ -62,6 +59,9 @@ public class UserService {
 
     @Autowired
     private UserDetailsServiceImpl userDetailsService;
+
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
 
     @Autowired
     JwtUtils jwtUtils;

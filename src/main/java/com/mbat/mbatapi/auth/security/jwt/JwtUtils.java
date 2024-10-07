@@ -17,12 +17,14 @@ import java.util.Date;
 public class JwtUtils {
     private static final Logger logger = LoggerFactory.getLogger(JwtUtils.class);
 
-    @Value("${bezkoder.app.jwtSecret}")
+    @Value("${mbat.app.jwtSecret}")
     private String jwtSecret;
 
-    @Value("${bezkoder.app.jwtExpirationMs}")
+    @Value("${mbat.app.jwtExpirationMs}")
     private int jwtExpirationMs;
 
+    @Value("${mbat.app.jwtRefreshExpirationMs}")
+    private int jwtRefreshExpirationMs;
     /**
      * Génère un jeton JWT pour l'utilisateur authentifié.
      *
@@ -30,13 +32,22 @@ public class JwtUtils {
      * @return Le jeton JWT généré.
      */
     public String generateJwtToken(Authentication authentication) {
-
         UserDetailsImpl userPrincipal = (UserDetailsImpl) authentication.getPrincipal();
 
         return Jwts.builder()
                 .setSubject((userPrincipal.getUsername()))
                 .setIssuedAt(new Date())
                 .setExpiration(new Date((new Date()).getTime() + jwtExpirationMs))
+                .signWith(SignatureAlgorithm.HS512, jwtSecret)
+                .compact();
+    }
+
+    // Générer un refresh token
+    public String generateRefreshToken(String username) {
+        return Jwts.builder()
+                .setSubject(username)
+                .setIssuedAt(new Date())
+                .setExpiration(new Date((new Date()).getTime() + jwtRefreshExpirationMs))
                 .signWith(SignatureAlgorithm.HS512, jwtSecret)
                 .compact();
     }
@@ -59,21 +70,20 @@ public class JwtUtils {
      */
     public boolean validateJwtToken(String authToken) {
         try {
-            Jwts.parser()
-                    .setSigningKey(jwtSecret)
-                    .parseClaimsJws(authToken);
+            Jwts.parser().setSigningKey(jwtSecret).parseClaimsJws(authToken);
             return true;
         } catch (SignatureException e) {
-            logger.error("Signature JWT invalide : {}", e.getMessage());
+            logger.error("Invalid JWT signature: {}", e.getMessage());
         } catch (MalformedJwtException e) {
-            logger.error("Jeton JWT mal formé : {}", e.getMessage());
+            logger.error("Invalid JWT token: {}", e.getMessage());
         } catch (ExpiredJwtException e) {
-            logger.error("Le jeton JWT a expiré : {}", e.getMessage());
+            logger.error("JWT token is expired: {}", e.getMessage());
         } catch (UnsupportedJwtException e) {
-            logger.error("Le jeton JWT n'est pas supporté : {}", e.getMessage());
+            logger.error("JWT token is unsupported: {}", e.getMessage());
         } catch (IllegalArgumentException e) {
-            logger.error("La chaîne de revendications JWT est vide : {}", e.getMessage());
+            logger.error("JWT claims string is empty: {}", e.getMessage());
         }
+
 
         return false;
     }
