@@ -4,6 +4,7 @@ import javax.validation.Valid;
 
 import com.mbat.mbatapi.auth.entity.RefreshToken;
 import com.mbat.mbatapi.auth.entity.VerificationToken;
+import com.mbat.mbatapi.auth.exception.TokenRefreshException;
 import com.mbat.mbatapi.auth.payload.response.JwtResponse;
 import com.mbat.mbatapi.auth.payload.response.MessageResponse;
 import com.mbat.mbatapi.auth.repository.UserRepository;
@@ -20,7 +21,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
@@ -45,7 +45,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/user")
 @Tag(name = "Utilisateur", description = "API pour les opérations liées aux utilisateurs.")
- class UserController {
+class UserController {
 
     @Autowired
     private UserService userService;
@@ -84,6 +84,12 @@ import java.util.stream.Collectors;
         return userService.authenticateUser(loginRequest);
     }
 
+    /**
+     * Rafraîchit le token JWT à l'aide du refresh token.
+     *
+     * @param requestBody Contient le refresh token.
+     * @return Un nouveau token JWT si le refresh token est valide.
+     */
     @PostMapping("/refresh-token")
     public ResponseEntity<?> refreshToken(@RequestBody Map<String, String> requestBody) {
         String refreshToken = requestBody.get("refreshToken");
@@ -91,19 +97,19 @@ import java.util.stream.Collectors;
 
         if (refreshTokenOptional.isPresent()) {
             RefreshToken token = refreshTokenOptional.get();
-            refreshTokenService.verifyExpiration(token);
+            refreshTokenService.verifyExpiration(token);  // Vérifie si le refresh token a expiré
 
-            // Génération d'un nouveau token d'accès
-            String newAccessToken = jwtUtils.generateJwtToken(
-                    new UsernamePasswordAuthenticationToken(token.getUser().getUsername(), null)
-            );
+            // Générer un nouveau token d'accès en utilisant le nom d'utilisateur
+            String newAccessToken = jwtUtils.generateJwtToken(token.getUser().getUsername());
+            RefreshToken newRefreshToken = refreshTokenService.createRefreshToken(token.getUser());
 
             // Conversion des rôles de Set<Role> à List<String>
             List<String> roles = token.getUser().getRoles().stream()
-                    .map(role -> role.getName().name()) // Si la classe Role a un champ "name" qui renvoie le nom du rôle.
+                    .map(role -> role.getName().name())
                     .collect(Collectors.toList());
 
-            return ResponseEntity.ok(new JwtResponse(newAccessToken, token.getUser().getId(), token.getUser().getUsername(), roles));
+            return ResponseEntity.ok(new JwtResponse(newAccessToken, newRefreshToken.getToken(), token.getUser().getId(), token.getUser().getUsername(), roles));
+//            return ResponseEntity.ok(new JwtResponse(newAccessToken, token.getUser().getId(), token.getUser().getUsername(), roles, token.getToken()));
         } else {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Refresh token invalide ou expiré.");
         }

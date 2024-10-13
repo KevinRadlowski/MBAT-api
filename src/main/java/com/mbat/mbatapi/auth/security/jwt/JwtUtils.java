@@ -23,68 +23,43 @@ public class JwtUtils {
     @Value("${mbat.app.jwtExpirationMs}")
     private int jwtExpirationMs;
 
-    @Value("${mbat.app.jwtRefreshExpirationMs}")
-    private int jwtRefreshExpirationMs;
     /**
-     * Génère un jeton JWT pour l'utilisateur authentifié.
+     * Génère un jeton JWT pour un utilisateur.
      *
-     * @param authentication L'objet Authentication contenant les informations de l'utilisateur.
-     * @return Le jeton JWT généré.
+     * @param username Le nom d'utilisateur.
+     * @return Le token JWT.
      */
-    public String generateJwtToken(Authentication authentication) {
-        UserDetailsImpl userPrincipal = (UserDetailsImpl) authentication.getPrincipal();
-
+    public String generateJwtToken(String username) {
         return Jwts.builder()
-                .setSubject((userPrincipal.getUsername()))
+                .setSubject(username)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date((new Date()).getTime() + jwtExpirationMs))
                 .signWith(SignatureAlgorithm.HS512, jwtSecret)
                 .compact();
     }
 
-    // Générer un refresh token
-    public String generateRefreshToken(String username) {
-        return Jwts.builder()
-                .setSubject(username)
-                .setIssuedAt(new Date())
-                .setExpiration(new Date((new Date()).getTime() + jwtRefreshExpirationMs))
-                .signWith(SignatureAlgorithm.HS512, jwtSecret)
-                .compact();
-    }
-
     /**
-     * Extrait le nom d'utilisateur du jeton JWT.
+     * Extrait le nom d'utilisateur du token JWT.
      *
-     * @param token Le jeton JWT à partir duquel extraire le nom d'utilisateur.
-     * @return Le nom d'utilisateur extrait du jeton.
+     * @param token Le token JWT.
+     * @return Le nom d'utilisateur extrait du token.
      */
     public String getUserNameFromJwtToken(String token) {
         return Jwts.parser().setSigningKey(jwtSecret).parseClaimsJws(token).getBody().getSubject();
     }
 
     /**
-     * Valide le jeton JWT fourni.
+     * Valide un jeton JWT.
      *
-     * @param authToken Le jeton JWT à valider.
-     * @return true si le jeton est valide, false sinon.
+     * @param authToken Le token JWT.
+     * @return true si le token est valide, false sinon.
      */
     public boolean validateJwtToken(String authToken) {
         try {
             Jwts.parser().setSigningKey(jwtSecret).parseClaimsJws(authToken);
             return true;
-        } catch (SignatureException e) {
-            logger.error("Invalid JWT signature: {}", e.getMessage());
-        } catch (MalformedJwtException e) {
-            logger.error("Invalid JWT token: {}", e.getMessage());
-        } catch (ExpiredJwtException e) {
-            logger.error("JWT token is expired: {}", e.getMessage());
-        } catch (UnsupportedJwtException e) {
-            logger.error("JWT token is unsupported: {}", e.getMessage());
-        } catch (IllegalArgumentException e) {
-            logger.error("JWT claims string is empty: {}", e.getMessage());
+        } catch (SignatureException | MalformedJwtException | ExpiredJwtException | UnsupportedJwtException | IllegalArgumentException e) {
+            return false;
         }
-
-
-        return false;
     }
 }

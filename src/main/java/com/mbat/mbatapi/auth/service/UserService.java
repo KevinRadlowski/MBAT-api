@@ -61,7 +61,7 @@ public class UserService {
     private UserDetailsServiceImpl userDetailsService;
 
     @Autowired
-    private RefreshTokenRepository refreshTokenRepository;
+    private RefreshTokenService refreshTokenService;
 
     @Autowired
     JwtUtils jwtUtils;
@@ -130,15 +130,19 @@ public class UserService {
                     new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
-            String jwt = jwtUtils.generateJwtToken(authentication);
+            String jwt = jwtUtils.generateJwtToken(authentication.getName());
 
             UserDetailsImpl userDetails = (UserDetailsImpl) authentication.getPrincipal();
             List<String> roles = userDetails.getAuthorities().stream()
                     .map(item -> item.getAuthority())
                     .collect(Collectors.toList());
 
+            // Générer et ajouter un refresh token à la réponse
+            RefreshToken refreshToken = refreshTokenService.createRefreshToken(userDetails.getUser());
+
+
             resetFailedAttempts(user);
-            return ResponseEntity.ok(new JwtResponse(jwt, userDetails.getId(), userDetails.getUsername(), roles));
+            return ResponseEntity.ok(new JwtResponse(jwt, refreshToken.getToken(), userDetails.getId(), userDetails.getUsername(), roles));
 
         } catch (BadCredentialsException e) {
             increaseFailedAttempts(user);
@@ -151,6 +155,8 @@ public class UserService {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .body(new MessageResponse("Votre compte est bloqué pour " + (LOCK_TIME_DURATION / 1000 / 60) + " minutes. Un lien de déblocage a été envoyé sur votre adresse email."));
             }
+        } catch (InvalidEmailException e) {
+            throw new RuntimeException(e);
         }
     }
 

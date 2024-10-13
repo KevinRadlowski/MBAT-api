@@ -9,28 +9,22 @@ public class JwtResponse {
     private String username;
     private List<String> roles;
 
-    public JwtResponse(String accessToken, Integer id, String username, List<String> roles) {
+    private String refreshToken; // Ajoute le refresh token ici
+
+    public JwtResponse(String accessToken, String refreshToken, Integer id, String username, List<String> roles) {
         this.token = accessToken;
+        this.refreshToken = refreshToken;
         this.id = id;
         this.username = username;
         this.roles = roles;
     }
-
-    public String getAccessToken() {
-        return token;
-    }
-
-    public void setAccessToken(String accessToken) {
-        this.token = accessToken;
-    }
-
-    public String getTokenType() {
-        return type;
-    }
-
-    public void setTokenType(String tokenType) {
-        this.type = tokenType;
-    }
+//    public JwtResponse(String accessToken, Integer id, String username, List<String> roles, String refreshToken) {
+//        this.token = accessToken;
+//        this.id = id;
+//        this.username = username;
+//        this.roles = roles;
+//        this.refreshToken = refreshToken; // Assigner le refresh token ici
+//    }
 
     public Integer getId() {
         return id;
@@ -50,5 +44,33 @@ public class JwtResponse {
 
     public List<String> getRoles() {
         return roles;
+    }
+
+    public String getToken() {
+        return token;
+    }
+
+    public void setToken(String token) {
+        this.token = token;
+    }
+
+    public String getType() {
+        return type;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public void setRoles(List<String> roles) {
+        this.roles = roles;
+    }
+
+    public String getRefreshToken() {
+        return refreshToken;
+    }
+
+    public void setRefreshToken(String refreshToken) {
+        this.refreshToken = refreshToken;
     }
 }
