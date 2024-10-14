@@ -96,6 +96,9 @@ public class UserService {
         }
 
         User user = userOpt.get();
+        // Assure-toi que tu récupères bien le thème de l'utilisateur
+        String theme = user.getTheme();
+        System.out.println("Thème de l'utilisateur récupéré : " + theme);  // Debug
 
         // Si le compte n'est pas vérifié, renvoyer un message d'erreur
         if (!user.isVerified()) {
@@ -140,9 +143,8 @@ public class UserService {
             // Générer et ajouter un refresh token à la réponse
             RefreshToken refreshToken = refreshTokenService.createRefreshToken(userDetails.getUser());
 
-
             resetFailedAttempts(user);
-            return ResponseEntity.ok(new JwtResponse(jwt, refreshToken.getToken(), userDetails.getId(), userDetails.getUsername(), roles));
+            return ResponseEntity.ok(new JwtResponse(jwt, refreshToken.getToken(), userDetails.getId(), userDetails.getUsername(), roles, theme));
 
         } catch (BadCredentialsException e) {
             increaseFailedAttempts(user);
@@ -170,6 +172,12 @@ public class UserService {
 
         if (newFailedAttempts >= MAX_FAILED_ATTEMPTS) {
             lockAccount(user);
+        } else {
+            try {
+                Thread.sleep(2000); // Ajoute un délai de 2 secondes entre chaque tentative
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
 
         userRepository.save(user);

@@ -1,5 +1,7 @@
 package com.mbat.mbatapi.auth.controller;
 
+import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletResponse;
 import javax.validation.Valid;
 
 import com.mbat.mbatapi.auth.entity.RefreshToken;
@@ -91,7 +93,7 @@ class UserController {
      * @return Un nouveau token JWT si le refresh token est valide.
      */
     @PostMapping("/refresh-token")
-    public ResponseEntity<?> refreshToken(@RequestBody Map<String, String> requestBody) {
+    public ResponseEntity<?> refreshToken(HttpServletResponse response, @RequestBody Map<String, String> requestBody) {
         String refreshToken = requestBody.get("refreshToken");
         Optional<RefreshToken> refreshTokenOptional = refreshTokenService.findByToken(refreshToken);
 
@@ -108,6 +110,13 @@ class UserController {
                     .map(role -> role.getName().name())
                     .collect(Collectors.toList());
 
+            // Ajouter le nouveau refresh token dans un cookie sécurisé
+            Cookie cookie = new Cookie("refreshToken", newRefreshToken.getToken());
+            cookie.setHttpOnly(true);
+            cookie.setSecure(true);  // S'assurer que le cookie est sécurisé
+            cookie.setPath("/"); // Chemin d'application
+            response.addCookie(cookie);
+
             return ResponseEntity.ok(new JwtResponse(newAccessToken, newRefreshToken.getToken(), token.getUser().getId(), token.getUser().getUsername(), roles));
 //            return ResponseEntity.ok(new JwtResponse(newAccessToken, token.getUser().getId(), token.getUser().getUsername(), roles, token.getToken()));
         } else {
@@ -115,7 +124,11 @@ class UserController {
         }
     }
 
-
+    @PostMapping("/logout")
+    public ResponseEntity<?> logout(@AuthenticationPrincipal UserDetailsImpl userDetails) throws InvalidEmailException {
+        refreshTokenService.deleteByUser(userDetails.getUser());
+        return ResponseEntity.ok(new MessageResponse("Déconnexion réussie."));
+    }
 
     @PostMapping("/logout-all-devices")
     public ResponseEntity<?> logoutFromAllDevices(@AuthenticationPrincipal UserDetailsImpl userDetails) throws InvalidEmailException {
@@ -455,6 +468,23 @@ class UserController {
         }
     }
 
+    @PatchMapping("/update-theme")
+    public ResponseEntity<?> updateTheme(@AuthenticationPrincipal UserDetailsImpl userDetails, @RequestBody Map<String, String> requestBody) {
+        String theme = requestBody.get("theme");
+        if (theme == null || theme.isEmpty()) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Le thème est requis."));
+        }
 
+        // Récupérer l'utilisateur actuel
+        Optional<User> userOpt = userRepository.findById(userDetails.getId());
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            user.setTheme(theme);  // Mettre à jour le thème de l'utilisateur
+            userRepository.save(user);  // Sauvegarder les changements
+            return ResponseEntity.ok(new MessageResponse("Thème mis à jour avec succès."));
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Utilisateur non trouvé."));
+        }
+    }
 
 }

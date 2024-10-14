@@ -17,6 +17,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -70,6 +71,18 @@ public class WebSecurityConfig implements WebMvcConfigurer {
             .authenticationEntryPoint(unauthorizedHandler).and()
             .authenticationProvider(authenticationProvider())
             .addFilterBefore(authenticationJwtTokenFilter(), UsernamePasswordAuthenticationFilter.class);
+//            .headers(headers -> headers
+//                    .contentSecurityPolicy("default-src 'self'; script-src 'self'; style-src 'self'")
+//                    .and()  // Ferme le bloc de configuration pour CSP
+//                    .frameOptions().deny()  // Pour prévenir le clickjacking
+//                    .referrerPolicy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER) // Politique Referrer
+//            );
+      // TODO : Header à réactiver en production pour utiliser HTTPS
+//            .headers()
+//            .httpStrictTransportSecurity()
+//            .maxAgeInSeconds(31536000)
+//            .includeSubDomains(true)
+//            .preload(true);
 
     return http.build();
   }

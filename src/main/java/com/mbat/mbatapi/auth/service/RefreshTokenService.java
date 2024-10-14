@@ -7,6 +7,7 @@ import com.mbat.mbatapi.auth.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import javax.transaction.Transactional;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
@@ -46,7 +47,11 @@ public class RefreshTokenService {
      * @param user L'utilisateur pour lequel le refresh token doit être créé.
      * @return Le refresh token créé.
      */
+    @Transactional
     public RefreshToken createRefreshToken(User user) {
+        // Invalide les anciens refresh tokens de l'utilisateur
+        refreshTokenRepository.deleteByUser(user);
+
         RefreshToken refreshToken = new RefreshToken();
         refreshToken.setUser(user);
         refreshToken.setToken(UUID.randomUUID().toString());
@@ -60,6 +65,7 @@ public class RefreshTokenService {
      *
      * @param user L'utilisateur dont les tokens doivent être supprimés.
      */
+    @Transactional
     public void deleteByUser(User user) {
         refreshTokenRepository.deleteByUser(user);
     }

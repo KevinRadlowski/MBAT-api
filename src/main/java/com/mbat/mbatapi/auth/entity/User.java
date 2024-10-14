@@ -37,6 +37,8 @@ public class User {
 
     private boolean isVerified = false;
 
+    // Nouveau champ pour stocker le thème de l'utilisateur
+    private String theme = "theme-default";  // Définir une valeur par défaut
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"), inverseJoinColumns = @JoinColumn(name = "role_id"))
@@ -55,6 +57,12 @@ public class User {
     // Suppression en cascade pour les tokens de vérification
     @OneToOne(mappedBy = "user", cascade = CascadeType.REMOVE, orphanRemoval = true)
     private VerificationToken verificationToken;
+
+    @Column(name = "is_two_factor_enabled")
+    private boolean isTwoFactorEnabled = false;
+
+    @Column(name = "two_factor_method")
+    private String twoFactorMethod; // "google_authenticator" ou "sms"
 
     public User(String username, String password)
             throws InvalidEmailException, InvalidPasswordException {
@@ -164,5 +172,29 @@ public class User {
 
     public void setVerificationToken(VerificationToken verificationToken) {
         this.verificationToken = verificationToken;
+    }
+
+    public String getTheme() {
+        return theme;
+    }
+
+    public void setTheme(String theme) {
+        this.theme = theme;
+    }
+
+    public boolean isTwoFactorEnabled() {
+        return isTwoFactorEnabled;
+    }
+
+    public void setTwoFactorEnabled(boolean twoFactorEnabled) {
+        isTwoFactorEnabled = twoFactorEnabled;
+    }
+
+    public String getTwoFactorMethod() {
+        return twoFactorMethod;
+    }
+
+    public void setTwoFactorMethod(String twoFactorMethod) {
+        this.twoFactorMethod = twoFactorMethod;
     }
 }

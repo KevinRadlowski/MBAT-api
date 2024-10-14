@@ -11,6 +11,17 @@ public class JwtResponse {
 
     private String refreshToken; // Ajoute le refresh token ici
 
+    private String theme;
+
+    public JwtResponse(String accessToken, String refreshToken, Integer id, String username, List<String> roles, String theme) {
+        this.token = accessToken;
+        this.refreshToken = refreshToken;
+        this.id = id;
+        this.username = username;
+        this.roles = roles;
+        this.theme = theme;
+    }
+
     public JwtResponse(String accessToken, String refreshToken, Integer id, String username, List<String> roles) {
         this.token = accessToken;
         this.refreshToken = refreshToken;
@@ -18,13 +29,6 @@ public class JwtResponse {
         this.username = username;
         this.roles = roles;
     }
-//    public JwtResponse(String accessToken, Integer id, String username, List<String> roles, String refreshToken) {
-//        this.token = accessToken;
-//        this.id = id;
-//        this.username = username;
-//        this.roles = roles;
-//        this.refreshToken = refreshToken; // Assigner le refresh token ici
-//    }
 
     public Integer getId() {
         return id;
@@ -72,5 +76,13 @@ public class JwtResponse {
 
     public void setRefreshToken(String refreshToken) {
         this.refreshToken = refreshToken;
+    }
+
+    public String getTheme() {
+        return theme;
+    }
+
+    public void setTheme(String theme) {
+        this.theme = theme;
     }
 }
