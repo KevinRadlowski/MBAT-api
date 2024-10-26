@@ -1,10 +1,14 @@
 package com.mbat.mbatapi.entity;
 
 import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import javax.persistence.*;
 
+@Setter
+@Getter
 @Entity
 @Data
 @NoArgsConstructor
@@ -30,35 +34,4 @@ public class CashFlow {
         this.account = account;
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public double getAmount() {
-        return amount;
-    }
-
-    public void setAmount(double amount) {
-        this.amount = amount;
-    }
-
-    public CreditType getTypeRentree() {
-        return creditType;
-    }
-
-    public void setTypeRentree(CreditType creditType) {
-        this.creditType = creditType;
-    }
-
-    public Account getAccount() {
-        return account;
-    }
-
-    public void setAccount(Account account) {
-        this.account = account;
-    }
 }

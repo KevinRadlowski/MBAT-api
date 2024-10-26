@@ -1,11 +1,15 @@
 package com.mbat.mbatapi.entity;
 
 import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import javax.persistence.*;
 import java.util.List;
 
+@Setter
+@Getter
 @Entity
 @Data
 @NoArgsConstructor
@@ -29,35 +33,4 @@ public class Year {
         this.account = account;
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public int getYear() {
-        return year;
-    }
-
-    public void setYear(int year) {
-        this.year = year;
-    }
-
-    public Account getAccount() {
-        return account;
-    }
-
-    public void setAccount(Account account) {
-        this.account = account;
-    }
-
-    public List<Month> getMonth() {
-        return month;
-    }
-
-    public void setMonth(List<Month> month) {
-        this.month = month;
-    }
 }

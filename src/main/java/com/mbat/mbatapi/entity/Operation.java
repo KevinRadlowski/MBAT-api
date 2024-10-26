@@ -2,11 +2,15 @@ package com.mbat.mbatapi.entity;
 
 
 import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import javax.persistence.*;
 import java.util.Date;
 
+@Setter
+@Getter
 @Entity
 @Data
 @NoArgsConstructor
@@ -39,51 +43,4 @@ public class Operation {
         this.month = month;
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public Date getDateOperation() {
-        return dateOperation;
-    }
-
-    public void setDateOperation(Date dateOperation) {
-        this.dateOperation = dateOperation;
-    }
-
-    public String getLabel() {
-        return label;
-    }
-
-    public void setLabel(String label) {
-        this.label = label;
-    }
-
-    public double getAmount() {
-        return amount;
-    }
-
-    public void setAmount(double amount) {
-        this.amount = amount;
-    }
-
-    public DebitType getDebitType() {
-        return debitType;
-    }
-
-    public void setDebitType(DebitType debitType) {
-        this.debitType = debitType;
-    }
-
-    public Month getMonth() {
-        return month;
-    }
-
-    public void setMonth(Month month) {
-        this.month = month;
-    }
 }

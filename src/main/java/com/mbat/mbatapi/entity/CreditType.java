@@ -1,11 +1,15 @@
 package com.mbat.mbatapi.entity;
 
 import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 import javax.persistence.*;
 import java.util.List;
 
+@Setter
+@Getter
 @Entity
 @Data
 @NoArgsConstructor
@@ -32,44 +36,5 @@ public class CreditType {
         this.account = account;
     }
 
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public String getLabel() {
-        return label;
-    }
-
-    public void setLabel(String label) {
-        this.label = label;
-    }
-
-    public String getColor() {
-        return color;
-    }
-
-    public void setColor(String color) {
-        this.color = color;
-    }
-
-    public Account getAccount() {
-        return account;
-    }
-
-    public void setAccount(Account account) {
-        this.account = account;
-    }
-
-    public List<CashFlow> getCashFlows() {
-        return cashFlows;
-    }
-
-    public void setCashFlows(List<CashFlow> cashFlows) {
-        this.cashFlows = cashFlows;
-    }
 }
 

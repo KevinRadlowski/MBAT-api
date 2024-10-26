@@ -2,11 +2,10 @@ package com.mbat.mbatapi.config;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.CommandLineRunner;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import com.mbat.mbatapi.entity.ERole;
-import com.mbat.mbatapi.entity.Role;
-import com.mbat.mbatapi.repository.RoleRepository;
+import com.mbat.mbatapi.auth.entity.ERole;
+import com.mbat.mbatapi.auth.entity.Role;
+import com.mbat.mbatapi.auth.repository.RoleRepository;
 
 /**
  * Configuration pour initialiser les rôles dans la base de données lors du démarrage de l'application.

@@ -19,16 +19,16 @@ public class RecurringOperation {
 
     private double amount;
 
-    private boolean isWithdrawed;
+    private boolean isWithdrew;
 
     @ManyToOne
     @JoinColumn(name = "account_id")
     private Account account;
 
-    public RecurringOperation(Date estimatedDate, double amount, boolean isWithdrawed, Account account) {
+    public RecurringOperation(Date estimatedDate, double amount, boolean isWithdrew, Account account) {
         this.estimatedDate = estimatedDate;
         this.amount = amount;
-        this.isWithdrawed = isWithdrawed;
+        this.isWithdrew = isWithdrew;
         this.account = account;
     }
 
@@ -56,12 +56,12 @@ public class RecurringOperation {
         this.amount = amount;
     }
 
-    public boolean isWithdrawed() {
-        return isWithdrawed;
+    public boolean isWithdrew() {
+        return isWithdrew;
     }
 
-    public void setWithdrawed(boolean isWithdrawed) {
-        this.isWithdrawed = isWithdrawed;
+    public void setWithdrew(boolean isWithdrew) {
+        this.isWithdrew = isWithdrew;
     }
 
     public Account getAccount() {
