@@ -9,6 +9,9 @@ public class LoginRequest {
 	@NotBlank
 	private String password;
 
+	private String totp;  // Champ pour le code TOTP
+
+
 	public String getUsername() {
 		return username;
 	}
@@ -24,4 +27,13 @@ public class LoginRequest {
 	public void setPassword(String password) {
 		this.password = password;
 	}
+
+	public String getTotp() {
+		return totp;
+	}
+
+	public void setTotp(String totp) {
+		this.totp = totp;
+	}
+
 }

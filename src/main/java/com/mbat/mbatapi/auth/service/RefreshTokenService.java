@@ -96,4 +96,13 @@ public class RefreshTokenService {
             refreshTokenRepository.save(token);
         }
     }
+
+    public void deleteByUserId(Long id) {
+
+        List<RefreshToken> tokens = refreshTokenRepository.findByUserId(id);
+        if (!tokens.isEmpty()) {
+            refreshTokenRepository.deleteAll(tokens);
+        }
+//        refreshTokenRepository.deleteById(Long.valueOf(id));
+    }
 }

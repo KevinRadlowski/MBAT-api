@@ -1,20 +1,16 @@
 package com.mbat.mbatapi.auth.controller;
 
-import javax.servlet.http.Cookie;
-import javax.servlet.http.HttpServletResponse;
-import javax.validation.Valid;
-
-import com.mbat.mbatapi.auth.entity.RefreshToken;
+import com.mbat.mbatapi.auth.entity.User;
 import com.mbat.mbatapi.auth.entity.VerificationToken;
-import com.mbat.mbatapi.auth.exception.TokenRefreshException;
-import com.mbat.mbatapi.auth.payload.response.JwtResponse;
+import com.mbat.mbatapi.auth.exception.InvalidEmailException;
+import com.mbat.mbatapi.auth.exception.InvalidPasswordException;
+import com.mbat.mbatapi.auth.payload.request.SignupRequest;
 import com.mbat.mbatapi.auth.payload.response.MessageResponse;
 import com.mbat.mbatapi.auth.repository.UserRepository;
 import com.mbat.mbatapi.auth.repository.VerificationTokenRepository;
-import com.mbat.mbatapi.auth.security.jwt.JwtUtils;
 import com.mbat.mbatapi.auth.security.services.UserDetailsImpl;
 import com.mbat.mbatapi.auth.service.EmailService;
-import com.mbat.mbatapi.auth.service.RefreshTokenService;
+import com.mbat.mbatapi.auth.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
@@ -22,22 +18,14 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
-import com.mbat.mbatapi.auth.ChangePasswordDto;
-import com.mbat.mbatapi.auth.service.UserService;
-import com.mbat.mbatapi.auth.entity.User;
-import com.mbat.mbatapi.auth.exception.InvalidEmailException;
-import com.mbat.mbatapi.auth.exception.InvalidPasswordException;
-import com.mbat.mbatapi.auth.exception.UserExistException;
-import com.mbat.mbatapi.auth.payload.request.LoginRequest;
-import com.mbat.mbatapi.auth.payload.request.SignupRequest;
-
-import java.util.*;
-import java.util.stream.Collectors;
+import javax.validation.Valid;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Contrôleur pour gérer les opérations utilisateur telles que l'inscription, la connexion,
@@ -59,93 +47,8 @@ class UserController {
     private VerificationTokenRepository verificationTokenRepository;
 
     @Autowired
-    private EmailService emailService; // Service d'envoi d'email
+    private EmailService emailService;
 
-    @Autowired
-    private RefreshTokenService refreshTokenService;
-
-    @Autowired
-    private JwtUtils jwtUtils;
-
-
-    /**
-     * Authentifie un utilisateur avec son nom d'utilisateur et son mot de passe.
-     *
-     * @param loginRequest Les informations de connexion de l'utilisateur.
-     * @return Une réponse contenant le token JWT en cas de succès, ou une erreur en cas d'échec.
-     * @throws UserExistException Si l'utilisateur n'existe pas.
-     */
-    @Operation(summary = "Authentifie un utilisateur", description = "Vérifie les informations de connexion d'un utilisateur et retourne un token JWT.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Connexion réussie."),
-            @ApiResponse(responseCode = "401", description = "Identifiant ou mot de passe incorrect."),
-            @ApiResponse(responseCode = "400", description = "Données de requête invalides.")
-    })
-    @PostMapping("/signin")
-    public ResponseEntity<?> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) throws UserExistException {
-        return userService.authenticateUser(loginRequest);
-    }
-
-    /**
-     * Rafraîchit le token JWT à l'aide du refresh token.
-     *
-     * @param requestBody Contient le refresh token.
-     * @return Un nouveau token JWT si le refresh token est valide.
-     */
-    @PostMapping("/refresh-token")
-    public ResponseEntity<?> refreshToken(HttpServletResponse response, @RequestBody Map<String, String> requestBody) {
-        String refreshToken = requestBody.get("refreshToken");
-        Optional<RefreshToken> refreshTokenOptional = refreshTokenService.findByToken(refreshToken);
-
-        if (refreshTokenOptional.isPresent()) {
-            RefreshToken token = refreshTokenOptional.get();
-            refreshTokenService.verifyExpiration(token);  // Vérifie si le refresh token a expiré
-
-            // Générer un nouveau token d'accès en utilisant le nom d'utilisateur
-            String newAccessToken = jwtUtils.generateJwtToken(token.getUser().getUsername());
-            RefreshToken newRefreshToken = refreshTokenService.createRefreshToken(token.getUser());
-
-            // Conversion des rôles de Set<Role> à List<String>
-            List<String> roles = token.getUser().getRoles().stream()
-                    .map(role -> role.getName().name())
-                    .collect(Collectors.toList());
-
-            // Ajouter le nouveau refresh token dans un cookie sécurisé
-            Cookie cookie = new Cookie("refreshToken", newRefreshToken.getToken());
-            cookie.setHttpOnly(true);
-            cookie.setSecure(true);  // S'assurer que le cookie est sécurisé
-            cookie.setPath("/"); // Chemin d'application
-            response.addCookie(cookie);
-
-            return ResponseEntity.ok(new JwtResponse(newAccessToken, newRefreshToken.getToken(), token.getUser().getId(), token.getUser().getUsername(), roles));
-//            return ResponseEntity.ok(new JwtResponse(newAccessToken, token.getUser().getId(), token.getUser().getUsername(), roles, token.getToken()));
-        } else {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Refresh token invalide ou expiré.");
-        }
-    }
-
-    @PostMapping("/logout")
-    public ResponseEntity<?> logout(@AuthenticationPrincipal UserDetailsImpl userDetails) throws InvalidEmailException {
-        refreshTokenService.deleteByUser(userDetails.getUser());
-        return ResponseEntity.ok(new MessageResponse("Déconnexion réussie."));
-    }
-
-    @PostMapping("/logout-all-devices")
-    public ResponseEntity<?> logoutFromAllDevices(@AuthenticationPrincipal UserDetailsImpl userDetails) throws InvalidEmailException {
-        // Révoquer tous les tokens liés à cet utilisateur
-        refreshTokenService.deleteByUser(userDetails.getUser());
-        return ResponseEntity.ok("Déconnexion de tous les appareils réussie.");
-    }
-
-    @PostMapping("/logout-all")
-    public ResponseEntity<?> logoutAllDevices(@AuthenticationPrincipal UserDetailsImpl userDetails) {
-        try {
-            refreshTokenService.revokeAllTokens(userDetails.getUsername());  // Révoquer tous les tokens de l'utilisateur
-            return ResponseEntity.ok(new MessageResponse("Déconnexion réussie sur tous les appareils."));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Erreur lors de la déconnexion de tous les appareils : " + e.getMessage()));
-        }
-    }
 
     @GetMapping("/get-one/{username}")
     public ResponseEntity<?> getUserInfo(@PathVariable String username) {
@@ -155,6 +58,9 @@ class UserController {
             Map<String, Object> userData = new HashMap<>();
             userData.put("username", user.getUsername());
             userData.put("verified", user.isVerified());  // Ajouter l'état de vérification
+            userData.put("isTwoFactorEnabled", user.isTwoFactorEnabled());
+            userData.put("twoFactorMethod", user.getTwoFactorMethod());
+
             return ResponseEntity.ok(userData);
         } else {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Utilisateur non trouvé"));
@@ -182,27 +88,6 @@ class UserController {
     }
 
     /**
-     * Change le mot de passe de l'utilisateur authentifié.
-     *
-     * @param body Les informations de changement de mot de passe.
-     * @param user L'utilisateur authentifié.
-     */
-    @Operation(summary = "Changer le mot de passe", description = "Permet de changer le mot de passe de l'utilisateur authentifié.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "Mot de passe changé avec succès."),
-            @ApiResponse(responseCode = "400", description = "L'ancien mot de passe est incorrect.")
-    })
-    @PatchMapping("/password")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void changePassword(@RequestBody ChangePasswordDto body, @AuthenticationPrincipal User user) {
-        try {
-            userService.changePassword(body, user);
-        } catch (InvalidPasswordException e) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "L'ancien mot de passe ne correspond pas");
-        }
-    }
-
-    /**
      * Met à jour les informations d'un utilisateur.
      *
      * @param id   L'ID de l'utilisateur à mettre à jour.
@@ -218,12 +103,13 @@ class UserController {
     })
     @PutMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public ResponseEntity<?> updateInformationUser(@PathVariable("id") Integer id, @RequestBody User user)
+    public ResponseEntity<?> updateInformationUser(@PathVariable("id") Long id, @RequestBody User user)
             throws InvalidEmailException {
         try {
-            ResponseEntity<User> response = userService.updateInformationUser(id, user);
+            ResponseEntity<?> response = userService.updateInformationUser(id, user);
             if (response.getStatusCode() == HttpStatus.OK) {
-                return ResponseEntity.ok(new MessageResponse("Informations de l'utilisateur mises à jour avec succès."));
+                return response;
+//                return ResponseEntity.ok(new MessageResponse("Informations de l'utilisateur mises à jour avec succès."));
             } else {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(new MessageResponse("Utilisateur non trouvé."));
@@ -245,107 +131,13 @@ class UserController {
             @ApiResponse(responseCode = "500", description = "Erreur interne du serveur.")
     })
     @DeleteMapping("/delete-user/{id}")
-    public ResponseEntity<?> deleteUser(@PathVariable("id") Integer id) {
+    public ResponseEntity<?> deleteUser(@PathVariable("id") Long id) {
         ResponseEntity<HttpStatus> response = userService.deleteUser(id);
         if (response.getStatusCode() == HttpStatus.NO_CONTENT) {
             return ResponseEntity.ok(new MessageResponse("Utilisateur supprimé avec succès."));
         } else {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(new MessageResponse("Erreur lors de la suppression de l'utilisateur."));
-        }
-    }
-
-
-    /**
-     * Envoie un e-mail de réinitialisation de mot de passe.
-     *
-     * @param requestBody Contient l'e-mail de l'utilisateur.
-     * @return Un message de succès ou une erreur si la demande échoue.
-     */
-    @Operation(summary = "Réinitialisation du mot de passe", description = "Envoie un lien de réinitialisation de mot de passe à l'utilisateur.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Lien de réinitialisation envoyé."),
-            @ApiResponse(responseCode = "400", description = "Erreur lors de la demande de réinitialisation.")
-    })
-    @PostMapping("/forgot-password")
-    public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> requestBody) {
-        try {
-            String email = requestBody.get("email");
-            if (email == null || email.isEmpty()) {
-                throw new IllegalArgumentException("L'email est requis.");
-            }
-
-            Optional<User> userOptional = userRepository.findByUsername(email);
-            if (userOptional.isEmpty()) {
-                return ResponseEntity.badRequest().body(new MessageResponse("L'utilisateur n'existe pas."));
-            }
-
-            userService.processForgotPassword(email);
-            return ResponseEntity.ok(new MessageResponse("Lien de réinitialisation envoyé avec succès"));
-        } catch (Exception e) {
-            Map<String, String> response = new HashMap<>();
-            response.put("error", "Erreur lors de la demande de réinitialisation du mot de passe");
-            return ResponseEntity.badRequest().body(response);
-        }
-    }
-
-    /**
-     * Réinitialise le mot de passe de l'utilisateur en utilisant un jeton.
-     *
-     * @param requestBody Contient le jeton de réinitialisation et le nouveau mot de passe.
-     * @return Un message de succès ou une erreur en cas d'échec.
-     */
-    @Operation(summary = "Réinitialiser le mot de passe", description = "Réinitialise le mot de passe de l'utilisateur à l'aide d'un jeton de réinitialisation.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Mot de passe mis à jour avec succès."),
-            @ApiResponse(responseCode = "400", description = "Erreur lors de la réinitialisation du mot de passe.")
-    })
-    @PostMapping("/reset-password")
-    public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> requestBody) {
-        try {
-            String token = requestBody.get("token");
-            String newPassword = requestBody.get("newPassword");
-            userService.updatePassword(token, newPassword);
-            return ResponseEntity.ok(new MessageResponse("Mot de passe mis à jour avec succès."));
-
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Erreur lors de la réinitialisation du mot de passe : " + e.getMessage()));
-        }
-    }
-
-    @Operation(summary = "Met à jour le mot de passe d'un utilisateur", description = "Permet de mettre à jour le mot de passe d'un utilisateur en fonction de son identifiant.")
-    @ApiResponses(value = {
-            @ApiResponse(responseCode = "204", description = "Mot de passe mis à jour avec succès."),
-            @ApiResponse(responseCode = "400", description = "Erreur lors de la mise à jour du mot de passe.")
-    })
-    @PutMapping("/update-password/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public ResponseEntity<?> updateUserPassword(@PathVariable("id") Integer id, @RequestBody ChangePasswordDto passwordDto) {
-        try {
-            // Appel au service pour mettre à jour le mot de passe
-            userService.updateUserPassword(id, passwordDto.getNewPassword());
-            return ResponseEntity.noContent().build(); // Statut 204 : succès sans contenu
-        } catch (InvalidPasswordException e) {
-            return ResponseEntity.badRequest().body(new MessageResponse("Erreur : " + e.getMessage()));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body(new MessageResponse("Erreur lors de la mise à jour du mot de passe."));
-        }
-    }
-
-    @GetMapping("/check-old-password")
-    public ResponseEntity<?> checkOldPassword(@RequestParam("userId") Integer userId, @RequestParam("oldPassword") String oldPassword) {
-        Optional<User> userOpt = userRepository.findById(userId);
-        if (userOpt.isPresent()) {
-            User user = userOpt.get();
-            boolean isValid = userService.checkOldPassword(user, oldPassword);
-            if (isValid) {
-                return ResponseEntity.ok(new MessageResponse("Mot de passe valide."));
-            } else {
-                return ResponseEntity.badRequest().body(new MessageResponse("L'ancien mot de passe est incorrect."));
-            }
-        } else {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Utilisateur non trouvé."));
         }
     }
 
@@ -486,5 +278,6 @@ class UserController {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Utilisateur non trouvé."));
         }
     }
+
 
 }

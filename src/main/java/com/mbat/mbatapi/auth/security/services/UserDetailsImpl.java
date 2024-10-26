@@ -16,14 +16,14 @@ import com.mbat.mbatapi.auth.entity.User;
 public class UserDetailsImpl implements UserDetails {
     private static final long serialVersionUID = 1L;
 
-    private Integer id;
+    private Long id;
     private String username;
     @JsonIgnore
     private String password;
     private boolean isVerified;
     private Collection<? extends GrantedAuthority> authorities;
 
-    public UserDetailsImpl(Integer id, String username, String password,boolean isVerified,
+    public UserDetailsImpl(Long id, String username, String password, boolean isVerified,
                            Collection<? extends GrantedAuthority> authorities) {
         this.id = id;
         this.username = username;
@@ -50,7 +50,7 @@ public class UserDetailsImpl implements UserDetails {
         return authorities;
     }
 
-    public Integer getId() {
+    public Long getId() {
         return id;
     }
     @Override

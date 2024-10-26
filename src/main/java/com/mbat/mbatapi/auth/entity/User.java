@@ -24,7 +24,7 @@ public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Integer id;
+    private Long id;
 
     @Email
     @NotBlank
@@ -53,16 +53,22 @@ public class User {
     @OneToOne(mappedBy = "user", cascade = CascadeType.REMOVE, orphanRemoval = true)
     private PasswordResetToken passwordResetToken;
 
+    @OneToMany(mappedBy = "user", cascade = CascadeType.REMOVE, orphanRemoval = true)
+    private Set<RefreshToken> refreshTokens;
 
     // Suppression en cascade pour les tokens de vérification
     @OneToOne(mappedBy = "user", cascade = CascadeType.REMOVE, orphanRemoval = true)
     private VerificationToken verificationToken;
 
     @Column(name = "is_two_factor_enabled")
-    private boolean isTwoFactorEnabled = false;
+    private Boolean isTwoFactorEnabled = false;
 
     @Column(name = "two_factor_method")
     private String twoFactorMethod; // "google_authenticator" ou "sms"
+
+    @Column(name = "two_factor_secret")
+    private String twoFactorSecret;  // Stocke le secret TOTP pour l'authentification Google Authenticator
+
 
     public User(String username, String password)
             throws InvalidEmailException, InvalidPasswordException {
@@ -73,11 +79,11 @@ public class User {
     public User() {
     }
 
-    public Integer getId() {
+    public Long getId() {
         return id;
     }
 
-    public void setId(Integer id) {
+    public void setId(Long id) {
         this.id = id;
     }
 
@@ -197,4 +203,13 @@ public class User {
     public void setTwoFactorMethod(String twoFactorMethod) {
         this.twoFactorMethod = twoFactorMethod;
     }
+
+    public String getTwoFactorSecret() {
+        return twoFactorSecret;
+    }
+
+    public void setTwoFactorSecret(String twoFactorSecret) {
+        this.twoFactorSecret = twoFactorSecret;
+    }
+
 }
