@@ -1,7 +1,6 @@
 package com.mbat.mbatapi.auth.service;
 
 import com.mbat.mbatapi.auth.entity.User;
-import com.mbat.mbatapi.auth.payload.response.MessageResponse;
 import com.mbat.mbatapi.auth.repository.UserRepository;
 import dev.samstevens.totp.code.CodeGenerator;
 import dev.samstevens.totp.code.DefaultCodeGenerator;
@@ -16,20 +15,15 @@ import dev.samstevens.totp.secret.SecretGenerator;
 import dev.samstevens.totp.time.SystemTimeProvider;
 import dev.samstevens.totp.time.TimeProvider;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 
 import java.util.Map;
-import java.util.Optional;
 
 import static dev.samstevens.totp.util.Utils.getDataUriForImage;
 
 /**
- * Service pour gérer l'authentification à deux facteurs (2FA) avec Google Authenticator (TOTP).
+ * Service pour gérer l'authentification à deux facteurs (2FA) avec l'app Authenticator (TOTP), Email ou SMS.
  */
 @Service
 public class TwoFactorAuthService {
@@ -45,24 +39,36 @@ public class TwoFactorAuthService {
     private final TimeProvider timeProvider = new SystemTimeProvider();
     private final CodeGenerator codeGenerator = new DefaultCodeGenerator(HashingAlgorithm.SHA1);
 
+    /**
+     * Met à jour les paramètres de 2FA pour un utilisateur donné.
+     *
+     * @param user    L'utilisateur pour lequel les paramètres doivent être mis à jour.
+     * @param updates Les paramètres à mettre à jour, incluant la méthode de 2FA et l'état d'activation.
+     */
     public void updateTwoFactorSettings(User user, Map<String, Object> updates) {
-        user.setTwoFactorMethod((String) updates.get("twoFactorMethod"));
+        user.setFirstTwoFactorMethod((String) updates.get("twoFactorMethod"));
         user.setTwoFactorEnabled((Boolean) updates.get("isTwoFactorEnabled"));
         userRepository.save(user);
     }
 
-
     /**
-     * Génère un secret pour l'utilisateur.
+     * Génère un secret pour l'utilisateur. Ce secret est utilisé pour le TOTP avec l'App Authenticator.
      *
-     * @return Le secret TOTP.
+     * @return Le secret TOTP généré.
      */
     public String generateSecret() {
         return secretGenerator.generate();
     }
 
-
-    public String getGoogleAuthenticatorQRCode(String secret, String accountName) throws QrGenerationException {
+    /**
+     * Génère un QR Code permettant à l'utilisateur de configurer l'App Authenticator avec le secret TOTP.
+     *
+     * @param secret      Le secret TOTP de l'utilisateur.
+     * @param accountName Le nom de compte associé (généralement le nom d'utilisateur).
+     * @return L'URI du QR Code généré en base64.
+     * @throws QrGenerationException En cas d'erreur lors de la génération du QR Code.
+     */
+    public String getAppAuthenticatorQRCode(String secret, String accountName) throws QrGenerationException {
         QrData data = new QrData.Builder()
                 .label(accountName)
                 .secret(secret)
@@ -77,6 +83,13 @@ public class TwoFactorAuthService {
         return getDataUriForImage(imageData, generator.getImageMimeType());
     }
 
+    /**
+     * Vérifie le code TOTP fourni par l'utilisateur.
+     *
+     * @param secret Le secret TOTP de l'utilisateur.
+     * @param code   Le code TOTP à vérifier.
+     * @return True si le code est valide, sinon False.
+     */
     public boolean verifyCode(String secret, String code) {
         if (secret == null || code == null) {
             throw new IllegalArgumentException("Le secret ou le code est null.");
@@ -84,12 +97,23 @@ public class TwoFactorAuthService {
         DefaultCodeVerifier verifier = new DefaultCodeVerifier(new DefaultCodeGenerator(), new SystemTimeProvider());
         return verifier.isValidCode(secret, code);
     }
+
+    /**
+     * Génère un code de vérification aléatoire de 6 chiffres pour l'authentification par email.
+     *
+     * @return Un code de vérification de 6 chiffres sous forme de chaîne de caractères.
+     */
     public String generateVerificationCode() {
         // Génération d'un code à 6 chiffres
         return String.format("%06d", (int) (Math.random() * 1000000));
     }
 
-
+    /**
+     * Envoie un code de vérification par email de manière asynchrone.
+     *
+     * @param email L'adresse email de l'utilisateur.
+     * @param code  Le code de vérification à envoyer.
+     */
     @Async
     public void sendEmailVerificationCode(String email, String code) {
         // Appel du service d'email pour envoyer le code
