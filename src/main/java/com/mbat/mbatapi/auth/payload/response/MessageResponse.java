@@ -9,6 +9,7 @@ public class MessageResponse {
     private String message;
     private String email;  // Ajouter un champ pour l'email
     private boolean requires2FA; // Ajouter un champ pour indiquer si le 2FA est requis
+    private String twoFactorMethod;
 
     public MessageResponse(String message) {
         this.message = message;
@@ -22,6 +23,12 @@ public class MessageResponse {
     public MessageResponse(String message, boolean requires2FA) {
         this.message = message;
         this.requires2FA = requires2FA;
+    }
+
+    public MessageResponse(String message, boolean requires2FA, String twoFactorMethod) {
+        this.message = message;
+        this.requires2FA = requires2FA;
+        this.twoFactorMethod = twoFactorMethod;
     }
 
 }

@@ -12,6 +12,8 @@ import com.mbat.mbatapi.auth.service.SmsService;
 import com.mbat.mbatapi.auth.service.TwoFactorAuthService;
 import dev.samstevens.totp.exceptions.QrGenerationException;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -47,63 +49,161 @@ public class TwoFactorAuthController {
 
 
     /**
-     * Active le 2FA pour l'utilisateur via Google Authenticator.
+     * Active le 2FA pour l'utilisateur via App Authenticator.
      *
-     * @param username Le nom d'utilisateur pour lequel activer le 2FA.
-     * @return Le lien du QR code pour configurer Google Authenticator.
+     * @param request La requête contenant le nom d'utilisateur pour lequel activer le 2FA via app Authenticator et le code à vérifier.
+     * @return Le lien du QR code pour configurer l'app Authenticator.
+     * @throws QrGenerationException En cas d'erreur lors de la validation du QR code pour activer le 2FA via app Authenticator.
      */
-    @PostMapping("/enable-2fa/google")
-    public ResponseEntity<?> enable2FAGoogle(@RequestParam String username) throws QrGenerationException {
+    @Operation(summary = "Active le 2FA via App Authenticator", description = "Valide la configuration 2FA via le code de l'app Authenticator.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "QR Code généré avec succès."),
+            @ApiResponse(responseCode = "400", description = "Utilisateur non trouvé.")
+    })
+    @PostMapping("/enable-2fa/app")
+    public ResponseEntity<?> enable2FAApp(@RequestBody TwoFactorAuthRequest request) throws QrGenerationException {
+        String username = request.getUsername();
+        String code = request.getCode();
+
+        Map<String, Object> update = new HashMap<>(Map.of());
+        update.put("twoFactorMethod", "app");
+        update.put("isTwoFactorEnabled", true);
+
         Optional<User> userOpt = userRepository.findByUsername(username);
         if (userOpt.isPresent()) {
             User user = userOpt.get();
-            String secret = twoFactorAuthService.generateSecret();
-            String qrCodeUrl = twoFactorAuthService.getGoogleAuthenticatorQRCode(secret, user.getUsername());
 
-            user.setTwoFactorMethod("google_authenticator");
-            user.setTwoFactorSecret(secret);
-            user.setTwoFactorEnabled(true);
-            userRepository.save(user);
+            // Le QR Code est généré à l'appel précédent dans la méthode 'generateQrCode()' et est enregistré pour l'utilisateur.
+            boolean isQrCodeVerified = twoFactorAuthService.verifyCode(user.getTwoFactorSecret(), code);
 
-            return ResponseEntity.ok(new MessageResponse("QR Code : " + qrCodeUrl));
+            if (isQrCodeVerified) {
+
+                twoFactorAuthService.updateTwoFactorSettings(user, update);
+
+                String jwt = jwtUtils.generateJwtToken(username);
+                RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
+
+                List<String> roles = user.getRoles().stream()
+                        .map(role -> role.getName().name())
+                        .collect(Collectors.toList());
+
+                return ResponseEntity.ok(new JwtResponse(jwt, refreshToken.getToken(), user.getId(), user.getUsername(), roles));
+            } else {
+                return ResponseEntity.badRequest().body(new MessageResponse("Le code n'est pas valide."));
+            }
         } else {
             return ResponseEntity.badRequest().body(new MessageResponse("Utilisateur non trouvé."));
         }
     }
 
     /**
-     * Endpoint pour activer le 2FA par SMS.
+     * Active le 2FA par SMS pour un utilisateur.
      *
-     * @param username Le nom d'utilisateur pour lequel activer le 2FA.
+     * @param request La requête contenant le nom d'utilisateur pour lequel activer le 2FA et le code à vérifier.
      * @param phoneNumber Le numéro de téléphone de l'utilisateur.
-     * @return Un message de succès.
+     * @return Un message de succès ou une erreur.
      */
-    @Operation(summary = "Active le 2FA par SMS.")
+    @Operation(summary = "Active le 2FA par SMS", description = "Envoie un code de vérification par SMS.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Code de vérification envoyé avec succès."),
+            @ApiResponse(responseCode = "400", description = "Utilisateur non trouvé.")
+    })
     @PostMapping("/enable-2fa/sms")
-    public ResponseEntity<?> enable2FASms(@RequestParam String username, @RequestParam String phoneNumber) {
+    public ResponseEntity<?> enable2FASms(@RequestBody TwoFactorAuthRequest request, @RequestParam String phoneNumber) {
+        String username = request.getUsername();
+        String code = request.getCode();
+
+        Map<String, Object> update = new HashMap<>(Map.of());
+        update.put("twoFactorMethod", "email");
+        update.put("isTwoFactorEnabled", true);
+
         Optional<User> userOpt = userRepository.findByUsername(username);
         if (userOpt.isPresent()) {
             User user = userOpt.get();
-            String verificationCode = twoFactorAuthService.generateVerificationCode();
 
-            smsService.sendVerificationCode(phoneNumber, verificationCode);
+            // Le QR Code est généré à l'appel précédent dans la méthode 'generateQrCode()' et est enregistré pour l'utilisateur.
+            boolean isQrCodeVerified = code.equals(user.getTwoFactorSecret());
 
-            user.setTwoFactorMethod("sms");
-            user.setTwoFactorEnabled(true);
-            userRepository.save(user);
+            if (isQrCodeVerified) {
 
-            return ResponseEntity.ok(new MessageResponse("Code de vérification envoyé par SMS."));
+                twoFactorAuthService.updateTwoFactorSettings(user, update);
+
+                String jwt = jwtUtils.generateJwtToken(username);
+                RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
+
+                List<String> roles = user.getRoles().stream()
+                        .map(role -> role.getName().name())
+                        .collect(Collectors.toList());
+
+                return ResponseEntity.ok(new JwtResponse(jwt, refreshToken.getToken(), user.getId(), user.getUsername(), roles));
+            } else {
+                return ResponseEntity.badRequest().body(new MessageResponse("Le code n'est pas valide."));
+            }
+
         } else {
             return ResponseEntity.badRequest().body(new MessageResponse("Utilisateur non trouvé."));
         }
     }
 
     /**
-     * Vérifie le code TOTP fourni par l'utilisateur.
+     * Active le 2FA par email pour un utilisateur.
      *
-     * @param request Le contenu de la requête contenant le username et le code d'authentification 2FA.
-     * @return Un message indiquant si la vérification a réussi ou échoué.
+     * @param request Contient le nom d'utilisateur et le code de vérification 2FA.
+     * @return Un message de succès ou une erreur.
      */
+    @Operation(summary = "Active le 2FA par Email", description = "Envoie un code de vérification par email.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Code de vérification envoyé avec succès."),
+            @ApiResponse(responseCode = "400", description = "Utilisateur non trouvé.")
+    })
+    @PostMapping("/enable-2fa/email")
+    public ResponseEntity<?> enable2FAEmail(@RequestBody TwoFactorAuthRequest request) {
+        String username = request.getUsername();
+        String code = request.getCode();
+
+        Map<String, Object> update = new HashMap<>(Map.of());
+        update.put("twoFactorMethod", "email");
+        update.put("isTwoFactorEnabled", true);
+
+        Optional<User> userOpt = userRepository.findByUsername(username);
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+
+            // Le QR Code est généré à l'appel précédent dans la méthode 'generateQrCode()' et est enregistré pour l'utilisateur.
+            boolean isQrCodeVerified = code.equals(user.getTwoFactorSecret());
+
+            if (isQrCodeVerified) {
+
+                twoFactorAuthService.updateTwoFactorSettings(user, update);
+
+                String jwt = jwtUtils.generateJwtToken(username);
+                RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
+
+                List<String> roles = user.getRoles().stream()
+                        .map(role -> role.getName().name())
+                        .collect(Collectors.toList());
+
+                return ResponseEntity.ok(new JwtResponse(jwt, refreshToken.getToken(), user.getId(), user.getUsername(), roles));
+            } else {
+                return ResponseEntity.badRequest().body(new MessageResponse("Le code n'est pas valide."));
+            }
+
+        } else {
+            return ResponseEntity.badRequest().body(new MessageResponse("Utilisateur non trouvé."));
+        }
+    }
+
+    /**
+     * Vérifie le code 2FA fourni par l'utilisateur.
+     *
+     * @param request Contient le nom d'utilisateur et le code de vérification.
+     * @return Une réponse avec un token JWT ou une erreur.
+     */
+    @Operation(summary = "Vérifie le code 2FA", description = "Vérifie le code fourni par l'utilisateur pour l'authentification.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Code vérifié avec succès."),
+            @ApiResponse(responseCode = "400", description = "Code invalide ou utilisateur non trouvé.")
+    })
     @PostMapping("/verify-2fa")
     public ResponseEntity<?> verify2FA(@RequestBody TwoFactorAuthRequest request) {
         String username = request.getUsername();
@@ -112,7 +212,12 @@ public class TwoFactorAuthController {
         Optional<User> userOpt = userRepository.findByUsername(username);
         if (userOpt.isPresent()) {
             User user = userOpt.get();
-            boolean isVerified = twoFactorAuthService.verifyCode(user.getTwoFactorSecret(), code);
+            boolean isVerified = false;
+            if (user.getTwoFactorMethod().equals("app")) {
+                isVerified = twoFactorAuthService.verifyCode(user.getTwoFactorSecret(), code);
+            } else {
+                isVerified = code.equals(user.getTwoFactorSecret());
+            }
             if (isVerified) {
                 String jwt = jwtUtils.generateJwtToken(username);
                 RefreshToken refreshToken = refreshTokenService.createRefreshToken(user);
@@ -130,7 +235,30 @@ public class TwoFactorAuthController {
         }
     }
 
+    /**
+     * Generates a QR code for Google Authenticator.
+     *
+     * @return A response containing the QR code URL or an error message.
+     */
+    @PostMapping("/generate-email-code")
+    public ResponseEntity<?> generateEmailCode(@RequestBody Map<String, String> requestBody) throws QrGenerationException {
+        String username = requestBody.get("username");
+        Optional<User> userOpt = userRepository.findByUsername(username);
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
 
+            String verificationCode = twoFactorAuthService.generateVerificationCode();
+
+            // Envoi du code par email
+            twoFactorAuthService.sendEmailVerificationCode(username, verificationCode);
+            user.setTwoFactorSecret(verificationCode);
+            userRepository.save(user);
+
+            return ResponseEntity.ok(new MessageResponse("Code de vérification envoyé par email."));
+        } else {
+            return ResponseEntity.badRequest().body("Utilisateur non trouvé.");
+        }
+    }
 
     /**
      * Generates a QR code for Google Authenticator.
@@ -189,6 +317,56 @@ public class TwoFactorAuthController {
             return ResponseEntity.ok(new MessageResponse("Authentification à deux facteurs désactivée avec succès."));
         } else {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Utilisateur non trouvé"));
+        }
+    }
+
+
+    @PostMapping("/check-2fa")
+    public ResponseEntity<?> check2FA(@RequestParam String username) {
+        Optional<User> userOpt = userRepository.findByUsername(username);
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            Map<String, Object> response = new HashMap<>();
+            response.put("isTwoFactorEnabled", user.isTwoFactorEnabled());
+            response.put("twoFactorMethod", user.getTwoFactorMethod());
+            return ResponseEntity.ok(response);
+        } else {
+            return ResponseEntity.badRequest().body(new MessageResponse("Utilisateur non trouvé."));
+        }
+    }
+    @PostMapping("/enable-second-2fa")
+    public ResponseEntity<?> enableSecond2FA(@RequestParam String username, @RequestParam String method) throws QrGenerationException {
+        Optional<User> userOpt = userRepository.findByUsername(username);
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+
+            if (user.isTwoFactorEnabled()) {
+                if (method.equals("app") && !"app".equals(user.getTwoFactorMethod())) {
+                    String secret = twoFactorAuthService.generateSecret();
+                    String qrCodeUrl = twoFactorAuthService.getGoogleAuthenticatorQRCode(secret, user.getUsername());
+
+                    user.setTwoFactorMethod(user.getTwoFactorMethod() + ",app");
+                    user.setTwoFactorSecret(secret);
+                    userRepository.save(user);
+
+                    return ResponseEntity.ok(new MessageResponse("QR Code pour la seconde méthode : " + qrCodeUrl));
+                } else if (method.equals("email") && !"email".equals(user.getTwoFactorMethod())) {
+                    String verificationCode = twoFactorAuthService.generateVerificationCode();
+                    twoFactorAuthService.sendEmailVerificationCode(user.getUsername(), verificationCode);
+
+                    user.setTwoFactorSecret(verificationCode);
+                    user.setTwoFactorMethod(user.getTwoFactorMethod() + ",email");
+                    userRepository.save(user);
+
+                    return ResponseEntity.ok(new MessageResponse("Code de vérification envoyé par email pour la seconde méthode."));
+                } else {
+                    return ResponseEntity.badRequest().body(new MessageResponse("La méthode est déjà configurée ou non valide."));
+                }
+            } else {
+                return ResponseEntity.badRequest().body(new MessageResponse("Aucune méthode de 2FA n'est activée, configurez-en une d'abord."));
+            }
+        } else {
+            return ResponseEntity.badRequest().body(new MessageResponse("Utilisateur non trouvé."));
         }
     }
 

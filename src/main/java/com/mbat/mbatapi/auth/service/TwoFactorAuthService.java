@@ -1,5 +1,8 @@
 package com.mbat.mbatapi.auth.service;
 
+import com.mbat.mbatapi.auth.entity.User;
+import com.mbat.mbatapi.auth.payload.response.MessageResponse;
+import com.mbat.mbatapi.auth.repository.UserRepository;
 import dev.samstevens.totp.code.CodeGenerator;
 import dev.samstevens.totp.code.DefaultCodeGenerator;
 import dev.samstevens.totp.code.DefaultCodeVerifier;
@@ -12,7 +15,16 @@ import dev.samstevens.totp.secret.DefaultSecretGenerator;
 import dev.samstevens.totp.secret.SecretGenerator;
 import dev.samstevens.totp.time.SystemTimeProvider;
 import dev.samstevens.totp.time.TimeProvider;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+
+import java.util.Map;
+import java.util.Optional;
 
 import static dev.samstevens.totp.util.Utils.getDataUriForImage;
 
@@ -22,9 +34,23 @@ import static dev.samstevens.totp.util.Utils.getDataUriForImage;
 @Service
 public class TwoFactorAuthService {
 
+    @Autowired
+    EmailService emailService;
+
+    @Autowired
+    private UserRepository userRepository;
+
+
     private final SecretGenerator secretGenerator = new DefaultSecretGenerator();
     private final TimeProvider timeProvider = new SystemTimeProvider();
     private final CodeGenerator codeGenerator = new DefaultCodeGenerator(HashingAlgorithm.SHA1);
+
+    public void updateTwoFactorSettings(User user, Map<String, Object> updates) {
+        user.setTwoFactorMethod((String) updates.get("twoFactorMethod"));
+        user.setTwoFactorEnabled((Boolean) updates.get("isTwoFactorEnabled"));
+        userRepository.save(user);
+    }
+
 
     /**
      * Génère un secret pour l'utilisateur.
@@ -51,11 +77,6 @@ public class TwoFactorAuthService {
         return getDataUriForImage(imageData, generator.getImageMimeType());
     }
 
-//    public boolean verifyCode(String secret, String code) {
-//        DefaultCodeVerifier verifier = new DefaultCodeVerifier(new DefaultCodeGenerator(), new SystemTimeProvider());
-//        return verifier.isValidCode(secret, code);
-//    }
-
     public boolean verifyCode(String secret, String code) {
         if (secret == null || code == null) {
             throw new IllegalArgumentException("Le secret ou le code est null.");
@@ -64,41 +85,15 @@ public class TwoFactorAuthService {
         return verifier.isValidCode(secret, code);
     }
     public String generateVerificationCode() {
-        return String.valueOf((int) (Math.random() * 9000) + 1000);
+        // Génération d'un code à 6 chiffres
+        return String.format("%06d", (int) (Math.random() * 1000000));
     }
 
-//    /**
-//     * Génère un lien pour le QR code de Google Authenticator.
-//     *
-//     * @param secret Le secret TOTP.
-//     * @param accountName Le nom de l'utilisateur.
-//     * @return Le lien pour générer le QR code.
-//     */
-//    public String getGoogleAuthenticatorQRCode(String secret, String accountName) throws QrGenerationException {
-//        QrData data = new QrData.Builder()
-//                .label(accountName)
-//                .secret(secret)
-//                .issuer("MBAT")
-//                .algorithm(HashingAlgorithm.SHA1)
-//                .digits(6)
-//                .period(30)
-//                .build();
-//
-//        QrGenerator generator = new ZxingPngQrGenerator();
-//        byte[] imageData = generator.generate(data);
-//        return getDataUriForImage(imageData, generator.getImageMimeType());
-//    }
-//
-//    /**
-//     * Vérifie le code TOTP fourni par l'utilisateur.
-//     *
-//     * @param secret Le secret TOTP.
-//     * @param code   Le code TOTP fourni par l'utilisateur.
-//     * @return true si le code est valide, false sinon.
-//     */
-//
-//    public boolean verifyCode(String secret, String code) {
-//        DefaultCodeVerifier verifier = new DefaultCodeVerifier(codeGenerator, new SystemTimeProvider());
-//        return verifier.isValidCode(secret, code);
-//    }
+
+    @Async
+    public void sendEmailVerificationCode(String email, String code) {
+        // Appel du service d'email pour envoyer le code
+        emailService.sendVerificationCode(email, code);
+    }
+
 }

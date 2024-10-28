@@ -63,7 +63,7 @@ public class WebSecurityConfig implements WebMvcConfigurer {
             .exceptionHandling().authenticationEntryPoint(unauthorizedHandler).and()
             .sessionManagement().sessionCreationPolicy(SessionCreationPolicy.STATELESS).and()
             .authorizeHttpRequests(auth -> auth
-                    .antMatchers("/api/auth/**", "/oauth2/**", "/api/unlock/**", "/api/user/check-email/**", "/api/user/signup", "/api/user/verify-email", "/api/twofactor/verify-2fa").permitAll()
+                    .antMatchers("/api/auth/**", "/oauth2/**", "/api/unlock/**", "/api/user/check-email/**", "/api/user/signup", "/api/user/verify-email", "/api/user/verify-email/email", "/api/twofactor/**", "/api/twofactor/enable-2fa/email").permitAll()
                     .antMatchers("/swagger-ui/**", "/v3/api-docs/**", "/swagger-ui.html", "/swagger-resources/**", "/webjars/**", "/swagger.json").permitAll() // Ajout des endpoints Swagger
                     .antMatchers("/api/admin/update/**").hasRole("ROLE_ADMIN") // Protéger la route avec le rôle ADMIN
                     .anyRequest().authenticated()

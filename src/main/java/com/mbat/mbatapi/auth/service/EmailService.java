@@ -202,4 +202,31 @@ public class EmailService {
                 "</div></body></html>";
     }
 
+    @Async
+    public void sendVerificationCode(String toEmail, String code) {
+        String subject = "Code de vérification 2FA";
+        String htmlContent = generateVerificationCodeEmailTemplate(
+                "Code de vérification",
+                "Voici votre code de vérification :",
+                "Entrez ce code dans votre application pour activer le 2FA.",
+                code
+        );
+
+        sendHtmlEmail(toEmail, subject, htmlContent);
+    }
+
+    public String generateVerificationCodeEmailTemplate(String title, String intro, String instruction, String code) {
+        return "<html>" +
+                "<body>" +
+                "<h2>" + title + "</h2>" +
+                "<p>" + intro + "</p>" +
+                "<p><strong>" + code + "</strong></p>" +
+                "<p>" + instruction + "</p>" +
+                "</body>" +
+                "</html>";
+    }
+
+
+
+
 }
