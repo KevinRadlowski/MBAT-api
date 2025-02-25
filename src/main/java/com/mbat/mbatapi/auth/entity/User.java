@@ -7,6 +7,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+
 import javax.persistence.*;
 import javax.validation.constraints.Email;
 import javax.validation.constraints.NotBlank;
@@ -15,10 +16,15 @@ import javax.validation.constraints.Size;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.mbat.mbatapi.auth.exception.InvalidEmailException;
 import com.mbat.mbatapi.auth.exception.InvalidPasswordException;
+import lombok.Getter;
+import lombok.Setter;
 
+@Getter
+@Setter
 @Entity
 @Table(name = "users", uniqueConstraints = {
         @UniqueConstraint(columnNames = "username"),
+        @UniqueConstraint(columnNames = "phone")
 })
 public class User {
 
@@ -36,9 +42,7 @@ public class User {
     private String password;
 
     private boolean isVerified = false;
-
-    // Nouveau champ pour stocker le thème de l'utilisateur
-    private String theme = "theme-default";  // Définir une valeur par défaut
+    private String theme = "theme-default";
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"), inverseJoinColumns = @JoinColumn(name = "role_id"))
@@ -63,41 +67,64 @@ public class User {
     @Column(name = "is_two_factor_enabled")
     private Boolean isTwoFactorEnabled = false;
 
-    @Column(name = "two_factor_method")
-    private String twoFactorMethod; // "google_authenticator" ou "sms"
+    @Column(name = "first_two_factor_method")
+    private String firstTwoFactorMethod; // "google_authenticator" ou "sms"
 
-    @Column(name = "two_factor_secret")
-    private String twoFactorSecret;  // Stocke le secret TOTP pour l'authentification Google Authenticator
+    @Column(name = "second_two_factor_method")
+    private String secondTwoFactorMethod; // "google_authenticator" ou "sms"
+
+    @Column(name = "first_two_factor_secret")
+    private String firstTwoFactorSecret;  // Stocke le secret TOTP pour l'authentification Google Authenticator
+
+    @Column(name = "second_two_factor_secret")
+    private String secondTwoFactorSecret;  // Stocke le secret TOTP pour l'authentification Google Authenticator
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.REMOVE, orphanRemoval = true)
+    private Set<BackupCode> backupCodes;
+
+    @Column(name = "password_last_updated")
+    private Date passwordLastUpdated;
+
+    private String phone;
+
+    private String firstName;
+    private String lastName;
+    private String securityQuestion;
+    private String securityAnswer;
 
 
-    public User(String username, String password)
-            throws InvalidEmailException, InvalidPasswordException {
-        this.setUsername(username);
+    // Constructeur principal
+    public User(String identifier, String password) throws InvalidEmailException, InvalidPasswordException {
+        this.setIdentifier(identifier);
         this.setPassword(password);
     }
 
     public User() {
     }
 
-    public Long getId() {
-        return id;
+    public void setIdentifier(String identifier) throws InvalidParameterException, InvalidEmailException {
+        // Regex pour l'email
+        String emailRegex = "^[\\w!#$%&'*+/=?`{|}~^-]+(?:\\.[\\w!#$%&'*+/=?`{|}~^-]+)*@(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,6}";
+        Pattern emailPattern = Pattern.compile(emailRegex);
+
+        if (emailPattern.matcher(identifier).matches()) {
+            this.username = identifier;
+        } else if (identifier.matches("^[0-9]{10}$")) {
+            this.phone = identifier;
+        } else {
+            throw new InvalidParameterException("Identifiant invalide : doit être un email ou un numéro de téléphone.");
+        }
     }
 
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public String getUsername() {
-        return username;
-    }
 
     public void setUsername(String username) throws InvalidParameterException, InvalidEmailException {
+        if (username == null || username.isEmpty()) {
+            throw new InvalidParameterException("Le champ 'username' ne peut être vide.");
+        }
+
         String regex = "^[\\w!#$%&'*+/=?`{|}~^-]+(?:\\.[\\w!#$%&'*+/=?`{|}~^-]+)*@(?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,6}";
         Pattern pattern = Pattern.compile(regex);
         Matcher matcher = pattern.matcher(username);
-        if (username == null) {
-            throw new InvalidParameterException("Le champ ne peut être vide.");
-        }
 
         if (matcher.matches()) {
             this.username = username;
@@ -105,6 +132,7 @@ public class User {
             throw new InvalidEmailException();
         }
     }
+
 
 
     public boolean isVerified() {
@@ -115,79 +143,6 @@ public class User {
         isVerified = verified;
     }
 
-
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
-    }
-
-    public Set<Role> getRoles() {
-        return roles;
-      }
-
-      public void setRoles(Set<Role> roles) {
-        this.roles = roles;
-      }
-
-    public int getFailedAttempts() {
-        return failedAttempts;
-    }
-
-    public void setFailedAttempts(int failedAttempts) {
-        this.failedAttempts = failedAttempts;
-    }
-
-    public boolean isAccountLocked() {
-        return accountLocked;
-    }
-
-    public void setAccountLocked(boolean accountLocked) {
-        this.accountLocked = accountLocked;
-    }
-
-    public Date getLockTime() {
-        return lockTime;
-    }
-
-    public void setLockTime(Date lockTime) {
-        this.lockTime = lockTime;
-    }
-
-    public String getUnlockToken() {
-        return unlockToken;
-    }
-
-    public void setUnlockToken(String unlockToken) {
-        this.unlockToken = unlockToken;
-    }
-
-    public PasswordResetToken getPasswordResetToken() {
-        return passwordResetToken;
-    }
-
-    public void setPasswordResetToken(PasswordResetToken passwordResetToken) {
-        this.passwordResetToken = passwordResetToken;
-    }
-
-    public VerificationToken getVerificationToken() {
-        return verificationToken;
-    }
-
-    public void setVerificationToken(VerificationToken verificationToken) {
-        this.verificationToken = verificationToken;
-    }
-
-    public String getTheme() {
-        return theme;
-    }
-
-    public void setTheme(String theme) {
-        this.theme = theme;
-    }
-
     public boolean isTwoFactorEnabled() {
         return isTwoFactorEnabled;
     }
@@ -195,21 +150,4 @@ public class User {
     public void setTwoFactorEnabled(boolean twoFactorEnabled) {
         isTwoFactorEnabled = twoFactorEnabled;
     }
-
-    public String getTwoFactorMethod() {
-        return twoFactorMethod;
-    }
-
-    public void setTwoFactorMethod(String twoFactorMethod) {
-        this.twoFactorMethod = twoFactorMethod;
-    }
-
-    public String getTwoFactorSecret() {
-        return twoFactorSecret;
-    }
-
-    public void setTwoFactorSecret(String twoFactorSecret) {
-        this.twoFactorSecret = twoFactorSecret;
-    }
-
 }

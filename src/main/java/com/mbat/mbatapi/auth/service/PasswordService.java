@@ -11,6 +11,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.Date;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -41,6 +42,7 @@ public class PasswordService {
             throw new InvalidPasswordException();
         }
         user.setPassword(encoder.encode(passwordDto.getNewPassword()));
+        user.setPasswordLastUpdated(new Date()); // Mise à jour de la date
         userRepository.save(user);
     }
 
@@ -65,6 +67,7 @@ public class PasswordService {
         }
 
         user.setPassword(encoder.encode(newPassword));
+        user.setPasswordLastUpdated(new Date()); // Met à jour la date
         userRepository.save(user);
         passwordResetTokenRepository.delete(resetToken); // Supprimez le jeton après utilisation
     }
@@ -87,6 +90,7 @@ public class PasswordService {
 
             // Encodage et mise à jour du mot de passe
             user.setPassword(encoder.encode(newPassword));
+            user.setPasswordLastUpdated(new Date());
             userRepository.save(user);
         } else {
             throw new InvalidPasswordException("Utilisateur non trouvé.");

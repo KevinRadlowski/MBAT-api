@@ -51,6 +51,8 @@ public class AuthService {
     @Autowired
     private EmailService emailService;
 
+    @Autowired
+    private EncryptionService encryptionService;
     /**
      * Authentifie un utilisateur avec ses informations de connexion.
      *
@@ -58,7 +60,14 @@ public class AuthService {
      * @return Une réponse avec le jeton JWT et les informations de l'utilisateur.
      */
     public ResponseEntity<?> authenticateUser(LoginRequest loginRequest) throws InvalidEmailException {
-        Optional<User> userOpt = userRepository.findByUsername(loginRequest.getUsername());
+        String identifier = loginRequest.getIdentifier();
+        Optional<User> userOpt = userRepository.findByUsername(identifier);
+
+        if (userOpt.isEmpty()) {
+            // Récupérer tous les utilisateurs et comparer le numéro de téléphone déchiffré
+            String encryptedPhone = encryptionService.encrypt(identifier);
+            userOpt = userRepository.findByPhone(encryptedPhone);
+        }
 
         if (userOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
@@ -96,17 +105,15 @@ public class AuthService {
             }
         }
 
-
-
         try {
             Authentication authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(loginRequest.getUsername(), loginRequest.getPassword()));
+                    new UsernamePasswordAuthenticationToken(user.getUsername(), loginRequest.getPassword()));
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
 
             // Vérifier si le 2FA est activé après la validation du mot de passe
             if (user.isTwoFactorEnabled()) {
-                return ResponseEntity.ok(new MessageResponse("2FA requis", true));
+                return ResponseEntity.ok(new MessageResponse("2FA requis", true, user.getFirstTwoFactorMethod()));
             }
 
             // Génère le token JWT après authentification réussie et validation du 2FA

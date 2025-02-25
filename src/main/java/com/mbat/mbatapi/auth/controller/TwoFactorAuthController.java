@@ -20,6 +20,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -296,6 +297,8 @@ public class TwoFactorAuthController {
                 return ResponseEntity.ok(response);
             } catch (QrGenerationException e) {
                 return ResponseEntity.status(500).body(new MessageResponse("Erreur lors de la génération du QR code."));
+            } catch (IOException e) {
+                throw new RuntimeException(e);
             }
 
         } else {
@@ -368,7 +371,7 @@ public class TwoFactorAuthController {
             @ApiResponse(responseCode = "400", description = "Méthode déjà configurée ou utilisateur non trouvé.")
     })
     @PostMapping("/enable-second-2fa")
-    public ResponseEntity<?> enableSecond2FA(@RequestParam String username, @RequestParam String method) throws QrGenerationException {
+    public ResponseEntity<?> enableSecond2FA(@RequestParam String username, @RequestParam String method) throws QrGenerationException, IOException {
         Optional<User> userOpt = userRepository.findByUsername(username);
         if (userOpt.isPresent()) {
             User user = userOpt.get();

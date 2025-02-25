@@ -18,6 +18,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import javax.imageio.ImageIO;
+import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
 import java.util.Map;
 
 import static dev.samstevens.totp.util.Utils.getDataUriForImage;
@@ -68,7 +75,7 @@ public class TwoFactorAuthService {
      * @return L'URI du QR Code généré en base64.
      * @throws QrGenerationException En cas d'erreur lors de la génération du QR Code.
      */
-    public String getAppAuthenticatorQRCode(String secret, String accountName) throws QrGenerationException {
+    public String getAppAuthenticatorQRCode(String secret, String accountName) throws QrGenerationException, IOException {
         QrData data = new QrData.Builder()
                 .label(accountName)
                 .secret(secret)
@@ -79,8 +86,30 @@ public class TwoFactorAuthService {
                 .build();
 
         QrGenerator generator = new ZxingPngQrGenerator();
-        byte[] imageData = generator.generate(data);
-        return getDataUriForImage(imageData, generator.getImageMimeType());
+        byte[] qrImageData = generator.generate(data);
+
+        // Charger le QR code en tant qu'image BufferedImage
+        BufferedImage qrImage = ImageIO.read(new ByteArrayInputStream(qrImageData));
+
+        // Charger le logo
+        BufferedImage logo = ImageIO.read(new File("src/main/resources/static/images/logo-mbat.png"));
+
+        // Superposer le logo sur le QR code
+        int logoWidth = qrImage.getWidth() / 5;
+        int logoHeight = qrImage.getHeight() / 5;
+        int logoX = (qrImage.getWidth() - logoWidth) / 2;
+        int logoY = (qrImage.getHeight() - logoHeight) / 2;
+
+        Graphics2D g = qrImage.createGraphics();
+        g.drawImage(logo, logoX, logoY, logoWidth, logoHeight, null);
+        g.dispose();
+
+        // Convertir l'image finale en base64
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ImageIO.write(qrImage, "png", baos);
+        byte[] finalImageData = baos.toByteArray();
+
+        return getDataUriForImage(finalImageData, "image/png");
     }
 
     /**

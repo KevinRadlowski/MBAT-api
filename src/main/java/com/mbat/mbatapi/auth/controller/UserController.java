@@ -10,6 +10,7 @@ import com.mbat.mbatapi.auth.repository.UserRepository;
 import com.mbat.mbatapi.auth.repository.VerificationTokenRepository;
 import com.mbat.mbatapi.auth.security.services.UserDetailsImpl;
 import com.mbat.mbatapi.auth.service.EmailService;
+import com.mbat.mbatapi.auth.service.EncryptionService;
 import com.mbat.mbatapi.auth.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -18,6 +19,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -49,6 +51,9 @@ class UserController {
     @Autowired
     private EmailService emailService;
 
+    @Autowired
+    private EncryptionService encryptionService;
+
 
     @GetMapping("/get-one/{username}")
     public ResponseEntity<?> getUserInfo(@PathVariable String username) {
@@ -57,9 +62,14 @@ class UserController {
             User user = userOpt.get();
             Map<String, Object> userData = new HashMap<>();
             userData.put("username", user.getUsername());
+            userData.put("firstName", user.getFirstName() != null ? encryptionService.decrypt(user.getFirstName()) : null);
+            userData.put("lastName", user.getLastName() != null ? encryptionService.decrypt(user.getLastName()) : null);
+            userData.put("phone", user.getPhone() != null ? encryptionService.decrypt(user.getPhone()) : null);
             userData.put("verified", user.isVerified());  // Ajouter l'état de vérification
             userData.put("isTwoFactorEnabled", user.isTwoFactorEnabled());
-            userData.put("twoFactorMethod", user.getTwoFactorMethod());
+            userData.put("twoFactorMethod", user.getFirstTwoFactorMethod());
+            userData.put("passwordLastUpdated", user.getPasswordLastUpdated());
+            userData.put("securityQuestion", encryptionService.decrypt(user.getSecurityQuestion()));
 
             return ResponseEntity.ok(userData);
         } else {
@@ -106,16 +116,22 @@ class UserController {
     public ResponseEntity<?> updateInformationUser(@PathVariable("id") Long id, @RequestBody User user)
             throws InvalidEmailException {
         try {
+            // Appel au service pour mettre à jour les informations
             ResponseEntity<?> response = userService.updateInformationUser(id, user);
+
+            // Vérification du statut de la réponse pour renvoyer le message approprié
             if (response.getStatusCode() == HttpStatus.OK) {
                 return response;
-//                return ResponseEntity.ok(new MessageResponse("Informations de l'utilisateur mises à jour avec succès."));
             } else {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(new MessageResponse("Utilisateur non trouvé."));
+                // Si un autre problème survient, on retourne directement le corps de la réponse du service
+                return response;
             }
         } catch (InvalidEmailException e) {
             return ResponseEntity.badRequest().body(new MessageResponse("Erreur : " + e.getMessage()));
+        } catch (Exception e) {
+            // Gestion d'erreurs générales pour d'autres cas inattendus
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(new MessageResponse("Une erreur est survenue : " + e.getMessage()));
         }
     }
 
@@ -277,6 +293,55 @@ class UserController {
         } else {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Utilisateur non trouvé."));
         }
+    }
+
+
+    /**
+     * Met à jour la question secrète et la réponse de l'utilisateur.
+     *
+     * @param userId L'ID de l'utilisateur.
+     * @param requestBody Contient la nouvelle question secrète et la réponse.
+     * @return Un message de succès ou une erreur si la mise à jour échoue.
+     */
+    @PutMapping("/{userId}/secret-question")
+    public ResponseEntity<?> updateSecretQuestion(@PathVariable Long userId, @RequestBody Map<String, String> requestBody) {
+        Optional<User> userOpt = userRepository.findById(userId);
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            String newQuestion = requestBody.get("question");
+            String answer = requestBody.get("answer");
+
+            if (newQuestion == null || newQuestion.isEmpty() || answer == null || answer.isEmpty()) {
+                return ResponseEntity.badRequest().body(new MessageResponse("La question et la réponse sont obligatoires."));
+            }
+
+            user.setSecurityQuestion(encryptionService.encrypt(newQuestion));
+            user.setSecurityAnswer(encryptionService.encrypt(answer));
+            userRepository.save(user);
+            return ResponseEntity.ok(new MessageResponse("Question secrète mise à jour avec succès."));
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse("Utilisateur non trouvé."));
+        }
+    }
+
+    /**
+     * Vérifie la réponse à la question secrète d'un utilisateur.
+     *
+     * @param userId L'ID de l'utilisateur.
+     * @param requestBody Contient la réponse fournie par l'utilisateur.
+     * @return Un ResponseEntity avec true si la réponse est correcte, sinon false.
+     */
+    @Operation(summary = "Vérifier la réponse à la question secrète", description = "Permet de vérifier si la réponse à la question secrète d'un utilisateur est correcte.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Réponse correcte ou incorrecte."),
+            @ApiResponse(responseCode = "404", description = "Utilisateur non trouvé.")
+    })
+    @PostMapping("/{userId}/verify-secret-answer")
+    @PreAuthorize("#userId == principal.id") // Restreint l'accès à l'utilisateur actuel uniquement
+    public ResponseEntity<Boolean> verifySecretAnswer(@PathVariable Long userId, @RequestBody Map<String, String> requestBody) {
+        String answer = requestBody.get("answer");
+        boolean isCorrect = userService.verifySecretAnswer(userId, answer);
+        return ResponseEntity.ok(isCorrect);
     }
 
 

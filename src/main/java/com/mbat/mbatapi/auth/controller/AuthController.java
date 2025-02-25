@@ -90,7 +90,7 @@ public class AuthController {
             response.addCookie(cookie);
 
             return ResponseEntity.ok(new JwtResponse(newAccessToken, newRefreshToken.getToken(), token.getUser().getId(), token.getUser().getUsername(), roles));
-//            return ResponseEntity.ok(new JwtResponse(newAccessToken, token.getUser().getId(), token.getUser().getUsername(), roles, token.getToken()));
+//            return ResponseEntity.ok(new JwtResponse(newAccessToken, token.getUser().getId(), token.getUser().getIdentifier(), roles, token.getToken()));
         } else {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Refresh token invalide ou expiré.");
         }

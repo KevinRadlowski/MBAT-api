@@ -66,6 +66,9 @@ public class UserService {
     @Autowired
     private TwoFactorAuthService twoFactorAuthService;
 
+    @Autowired
+    private EncryptionService encryptionService;
+
     /**
      * Enregistre un nouvel utilisateur.
      *
@@ -77,21 +80,41 @@ public class UserService {
     public ResponseEntity<?> registerUser(SignupRequest signUpRequest)
             throws InvalidPasswordException, InvalidEmailException {
 
-        if (userRepository.existsByUsername(signUpRequest.getUsername())) {
+        if (userRepository.existsByUsername(signUpRequest.getUsername()) || userRepository.existsByPhone(signUpRequest.getPhone())) {
             return ResponseEntity
                     .badRequest()
-                    .body(new MessageResponse("Cet utilisateur existe déjà."));
+                    .body(new MessageResponse("Cet utilisateur ou ce numéro de téléphone existe déjà."));
+        }
+
+        // Validation du format du numéro de téléphone
+        if (!signUpRequest.getPhone().isEmpty() && !signUpRequest.getPhone().matches("^[0-9]{10}$")) {
+            return ResponseEntity.badRequest().body(new MessageResponse("Le numéro de téléphone doit contenir exactement 10 chiffres."));
+        }
+
+        // Vérifier si le numéro de téléphone est déjà utilisé
+        if (signUpRequest.getPhone() != null && isPhoneNumberExists(signUpRequest.getPhone())) {
+            return ResponseEntity
+                    .badRequest()
+                    .body(new MessageResponse("Ce numéro de téléphone est déjà utilisé."));
         }
 
         // Crée un nouveau compte utilisateur
         User user = new User(signUpRequest.getUsername(),
                 encoder.encode(signUpRequest.getPassword()));
+        user.setPhone(encryptionService.encrypt(signUpRequest.getPhone()));
+        user.setFirstName(encryptionService.encrypt(signUpRequest.getFirstName()));
+        user.setLastName(encryptionService.encrypt(signUpRequest.getLastName()));
+        user.setSecurityQuestion(encryptionService.encrypt(signUpRequest.getSecurityQuestion()));
+        user.setSecurityAnswer(encryptionService.encrypt(signUpRequest.getSecurityAnswer()));
         user.setVerified(false); // Par défaut, le compte est non vérifié
 
         // Définir le rôle de l'utilisateur sur ROLE_USER par défaut
         Role userRole = roleRepository.findByName(ERole.ROLE_USER)
                 .orElseThrow(() -> new RuntimeException("Le rôle USER n'est pas défini."));
         user.setRoles(Collections.singleton(userRole));
+
+        // Ajout de la date de mise à jour du mot de passe lors de la création de l'utilisateur
+        user.setPasswordLastUpdated(new Date());
 
         // Sauvegarde l'utilisateur dans la base de données
         userRepository.save(user);
@@ -144,8 +167,20 @@ public class UserService {
         if (userOpt.isPresent()) {
             User user = userOpt.get();
 
-            if (!user.getUsername().equals(updatedUser.getUsername())) {
+            // Vérification du numéro de téléphone s'il est présent et non vide avant le déchiffrement
+            if (updatedUser.getPhone() != null && !updatedUser.getPhone().isEmpty()) {
+                String encryptedPhone = encryptionService.encrypt(updatedUser.getPhone());
+                if (userRepository.existsByPhone(encryptedPhone)) {
+                    return ResponseEntity
+                            .badRequest()
+                            .body(new MessageResponse("Ce numéro de téléphone est déjà utilisé."));
+                }
+                user.setPhone(encryptedPhone);
+            }
+
+            if (updatedUser.getUsername() != null && !user.getUsername().equals(updatedUser.getUsername())) {
                 // Met à jour l'adresse email
+                String oldEmail = user.getUsername();
                 user.setUsername(updatedUser.getUsername());
                 user.setVerified(false);
 
@@ -157,6 +192,21 @@ public class UserService {
                 // Envoie l'e-mail de confirmation avec le nouveau lien de vérification
                 String verificationLink = "http://192.168.56.101:4200/verify-email?token=" + token;
                 emailService.sendVerificationEmailChanged(user.getUsername(), verificationLink);
+                emailService.sendEmailModificationNotification(oldEmail); // Ajoute l'ancienne adresse ici
+            }
+
+            if (updatedUser.getFirstName() != null) {
+                user.setFirstName(encryptionService.encrypt(updatedUser.getFirstName()));
+            }
+            if (updatedUser.getLastName() != null) {
+                user.setLastName(encryptionService.encrypt(updatedUser.getLastName()));
+            }
+            if (updatedUser.getSecurityAnswer() != null) {
+                user.setSecurityAnswer(encryptionService.encrypt(updatedUser.getSecurityAnswer()));
+            }
+
+            if (updatedUser.getSecurityQuestion() != null) {
+                user.setSecurityAnswer(encryptionService.encrypt(updatedUser.getSecurityQuestion()));
             }
 
             // Sauvegarde les modifications
@@ -173,7 +223,7 @@ public class UserService {
             return new ResponseEntity<>(response, HttpStatus.OK);
 
         } else {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            return new ResponseEntity<>(new MessageResponse("Utilisateur non trouvé."), HttpStatus.NOT_FOUND);
         }
     }
 
@@ -210,5 +260,44 @@ public class UserService {
         emailService.sendVerificationEmail(user.getUsername(), verificationLink);
 
         return ResponseEntity.ok(new MessageResponse("Un nouveau mail de vérification a été envoyé."));
+    }
+
+    /**
+     * Vérifie si la réponse à la question secrète de l'utilisateur est correcte.
+     *
+     * @param userId L'ID de l'utilisateur.
+     * @param answer La réponse fournie par l'utilisateur.
+     * @return true si la réponse est correcte, sinon false.
+     */
+    public boolean verifySecretAnswer(Long userId, String answer) {
+        Optional<User> userOpt = userRepository.findById(userId);
+        if (userOpt.isPresent()) {
+            User user = userOpt.get();
+            return encryptionService.decrypt(user.getSecurityAnswer()).equalsIgnoreCase(answer.trim());
+        }
+        return false;
+    }
+
+    public boolean isPhoneNumberExists(String phone) {
+        return userRepository.findAll().stream()
+                .anyMatch(user -> {
+                    String encryptedPhone = user.getPhone();
+                    if (encryptedPhone == null || encryptedPhone.isEmpty()) {
+                        return false; // Ne tente pas de déchiffrer si la valeur est vide
+                    }
+                    try {
+                        // Vérifie que la longueur est un multiple de 16 pour AES
+                        if (encryptedPhone.length() % 16 != 0) {
+                            return false;
+                        }
+                        String decryptedPhone = encryptionService.decrypt(encryptedPhone);
+                        return decryptedPhone.equals(phone);
+                    } catch (Exception e) {
+                        // Log l'erreur pour identifier les données corrompues
+                        System.err.println("Erreur lors du déchiffrement du numéro de téléphone pour l'utilisateur ID "
+                                + user.getId() + " : " + e.getMessage());
+                        return false;
+                    }
+                });
     }
 }

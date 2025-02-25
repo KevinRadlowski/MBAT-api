@@ -108,6 +108,96 @@ public class EmailService {
     }
 
     /**
+     * Envoie un email de notification pour l'activation du 2FA.
+     */
+    @Async
+    public void sendTwoFactorEnabledEmail(String toEmail, String method) {
+        String subject = "Activation de la double authentification";
+        String htmlContent = generateEmailTemplate(
+                "Activation de la double authentification",
+                "La double authentification a été activée avec succès.",
+                "Méthode utilisée : " + (method.equals("app") ? "Application Authenticator" : "Email") + ".",
+                null,
+                null
+        );
+        sendHtmlEmail(toEmail, subject, htmlContent);
+    }
+
+    /**
+     * Envoie un email de notification pour la désactivation du 2FA.
+     */
+    @Async
+    public void sendTwoFactorDisabledEmail(String toEmail) {
+        String subject = "Désactivation de la double authentification";
+        String htmlContent = generateEmailTemplate(
+                "Désactivation de la double authentification",
+                "La double authentification a été désactivée.",
+                "Si vous n'avez pas initié cette action, contactez notre support immédiatement.",
+                null,
+                null
+        );
+        sendHtmlEmail(toEmail, subject, htmlContent);
+    }
+
+    /**
+     * Envoie un email de notification pour la modification de l'adresse email.
+     */
+    @Async
+    public void sendEmailModificationNotification(String toEmail) {
+        String subject = "Modification de l'adresse email";
+        String htmlContent = generateEmailTemplate(
+                "Modification de l'adresse email",
+                "Votre adresse email a été mise à jour.",
+                "Si cette modification n'a pas été faite par vous, veuillez contacter notre support immédiatement.",
+                null,
+                null
+        );
+        sendHtmlEmail(toEmail, subject, htmlContent);
+    }
+
+    /**
+     * Envoie un email de notification pour la modification du mot de passe.
+     */
+    @Async
+    public void sendPasswordModificationNotification(String toEmail) {
+        String subject = "Modification du mot de passe";
+        String htmlContent = generateEmailTemplate(
+                "Modification du mot de passe",
+                "Votre mot de passe a été modifié avec succès.",
+                "Si cette modification n'a pas été faite par vous, veuillez contacter notre support immédiatement.",
+                null,
+                null
+        );
+        sendHtmlEmail(toEmail, subject, htmlContent);
+    }
+
+    @Async
+    public void sendBackupCodesGeneratedEmail(String toEmail) {
+        String subject = "Codes de secours régénérés";
+        String htmlContent = generateEmailTemplate(
+                "Régénération des codes de secours",
+                "Vos codes de secours ont été régénérés avec succès.",
+                "Si vous n'avez pas initié cette action, veuillez contacter notre support immédiatement.",
+                null,
+                null
+        );
+        sendHtmlEmail(toEmail, subject, htmlContent);
+    }
+
+    @Async
+    public void sendBackupCodeUsedEmail(String toEmail, String partialCode) {
+        String subject = "Code de secours utilisé";
+        String htmlContent = generateEmailTemplate(
+                "Utilisation d'un code de secours",
+                "Un de vos codes de secours a été utilisé.",
+                "Code partiellement masqué : ****" + partialCode.substring(4) + ". Si vous n'avez pas initié cette action, veuillez contacter notre support immédiatement.",
+                null,
+                null
+        );
+        sendHtmlEmail(toEmail, subject, htmlContent);
+    }
+
+    /**
      * Méthode générique pour envoyer un email au format HTML.
      */
     private void sendHtmlEmail(String to, String subject, String htmlContent) {
